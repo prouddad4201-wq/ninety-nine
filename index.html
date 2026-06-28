@@ -1733,9 +1733,40 @@ const POWER_LEVELS = {
 
 /** Reduce raw OCR output to a likely card-name search string (first
  *  non-empty line, stripped of characters that aren't part of card names). */
+/**
+ * Pick the most card-name-like line from raw OCR output.
+ * Scores each line: prefers lines that are mostly letters, right length,
+ * not all-numbers, not a mana cost pattern.
+ */
 function cleanOcrText(raw) {
-  const firstLine = (raw || '').split('\n').map((l) => l.trim()).filter(Boolean)[0] || '';
-  return firstLine.replace(/[^A-Za-z0-9,'\u2019\-\s]/g, '').replace(/\s{2,}/g, ' ').trim();
+  if (!raw) return '';
+  const lines = raw.split('\n').map(l => l.trim()).filter(Boolean);
+  if (!lines.length) return '';
+
+  function scoreLine(l) {
+    // Strip all non-card-name chars first
+    const s = l.replace(/[^A-Za-z0-9,\'\u2019\- ]/g, '').replace(/\s{2,}/g, ' ').trim();
+    if (!s || s.length < 2 || s.length > 60) return -1;
+    const letters = (s.match(/[A-Za-z]/g) || []).length;
+    const total   = s.replace(/\s/g,'').length;
+    const ratio   = total ? letters / total : 0;
+    if (ratio < 0.4) return -1;               // mostly numbers/symbols = not a name
+    if (/^\d+$/.test(s)) return -1;           // pure number (set number, mana value)
+    if (/^[0-9\/]+$/.test(s)) return -1;      // collector number like 002/022
+    let score = ratio * 10;                    // base: letter ratio
+    score += Math.min(s.length, 25) * 0.3;    // prefer reasonable length
+    if (/^[A-Z]/.test(s)) score += 3;         // starts with capital = good
+    if (/[a-z]/.test(s)) score += 2;          // has lowercase = real word
+    if (s.split(' ').length >= 2) score += 1; // multi-word names score higher
+    return score;
+  }
+
+  let best = '', bestScore = -1;
+  for (const line of lines) {
+    const s = scoreLine(line);
+    if (s > bestScore) { bestScore = s; best = line.replace(/[^A-Za-z0-9,\'\u2019\- ]/g,'').replace(/\s{2,}/g,' ').trim(); }
+  }
+  return best;
 }
 
 /* ----------------------------- Storage ----------------------------- */
@@ -3803,34 +3834,113 @@ const Render = (() => {
     });
   }
 
-  async function runOcr(imageSource) {
+  /**
+   * Preprocess canvas: 3x upscale + greyscale + contrast boost
+   * Makes text much clearer for Tesseract
+   */
+  function preprocessForOcr(srcCanvas) {
+    const scale = 3;
+    const out = document.createElement('canvas');
+    out.width  = srcCanvas.width  * scale;
+    out.height = srcCanvas.height * scale;
+    const ctx = out.getContext('2d');
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(srcCanvas, 0, 0, out.width, out.height);
+    const id = ctx.getImageData(0, 0, out.width, out.height);
+    const d  = id.data;
+    for (let i = 0; i < d.length; i += 4) {
+      const grey = 0.299*d[i] + 0.587*d[i+1] + 0.114*d[i+2];
+      const c = grey < 128 ? Math.max(0, grey - 40) : Math.min(255, grey + 40);
+      d[i] = d[i+1] = d[i+2] = c;
+      // alpha unchanged
+    }
+    ctx.putImageData(id, 0, 0);
+    return out;
+  }
+
+  /** Crop canvas to vertical band defined by fraction of height */
+  function cropBand(src, yFrac0, yFrac1) {
+    const y0 = Math.floor(src.height * yFrac0);
+    const y1 = Math.floor(src.height * yFrac1);
+    const out = document.createElement('canvas');
+    out.width = src.width; out.height = y1 - y0;
+    out.getContext('2d').drawImage(src, 0, y0, src.width, out.height, 0, 0, src.width, out.height);
+    return out;
+  }
+
+  function buildCandidateHtml(cands, ocrText, note) {
+    return '<p class="dim" style="margin-bottom:.6rem">Tap to add to collection:</p>' +
+      cands.map(n =>
+        `<div class="scan-match"><span class="scan-name">${Render.escapeHtml(n)}</span>` +
+        `<button class="btn btn-sm btn-primary" data-action="scan-add" data-name="${Render.escapeHtml(n)}">Add</button></div>`
+      ).join('') +
+      `<p class="scan-status">Read: “${Render.escapeHtml(ocrText)}”${note ? ' ' + note : ''}</p>`;
+  }
+
+  async function runOcr(sourceCanvas) {
     const res = $('#scan-result');
-    res.innerHTML = '<p class="dim">Loading OCR engine\u2026</p>';
+    res.innerHTML = '<p class="dim">Loading OCR engine…</p>';
+    try { await loadTesseract(); }
+    catch (e) {
+      res.innerHTML = '<p class="error-text">Couldn’t load OCR engine — check your internet connection.</p>';
+      return;
+    }
+
+    // Try 3 crop bands: just the name bar, top quarter, top half
+    // Multiple passes means we always catch the name regardless of photo framing
+    const bands = [
+      cropBand(sourceCanvas, 0.00, 0.12),
+      cropBand(sourceCanvas, 0.00, 0.28),
+      cropBand(sourceCanvas, 0.00, 0.50),
+    ];
+
+    res.innerHTML = '<p class="dim">Reading card name…</p>';
+
+    const tessOpts = {
+      tessedit_char_whitelist: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 ',-.",
+    };
+
+    let bestText = '';
+    for (const band of bands) {
+      try {
+        const proc = preprocessForOcr(band);
+        const { data: { text } } = await window.Tesseract.recognize(proc, 'eng', tessOpts);
+        const candidate = cleanOcrText(text);
+        if (candidate && candidate.length > bestText.length) bestText = candidate;
+      } catch (_) {}
+    }
+
+    if (!bestText || bestText.length < 2) {
+      res.innerHTML = `<p class="error-text">Couldn’t read the card name.</p>
+        <ul class="dim small" style="margin:.5rem 0 0 1.2rem;line-height:2">
+          <li>Card name must be visible at the <strong>top of the frame</strong></li>
+          <li>Use bright, even light — no glare</li>
+          <li>Hold phone flat and parallel to the card</li>
+          <li>Try the <strong>Upload image</strong> button for a cleaner photo</li>
+        </ul>`;
+      return;
+    }
+
+    res.innerHTML = `<p class="dim">Searching for “${Render.escapeHtml(bestText)}”…</p>`;
+
     try {
-      await loadTesseract();
-      res.innerHTML = '<p class="dim">Recognizing text\u2026</p>';
-      const { data: { text } } = await window.Tesseract.recognize(imageSource, 'eng', {
-        tessedit_char_whitelist: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 ',-.",
-      });
-      const cleaned = cleanOcrText(text);
-      if (!cleaned || cleaned.length < 2) {
-        res.innerHTML = '<p class="error-text">Couldn\u2019t read the card name.</p><p class="dim small" style="margin-top:.4rem">Tips: more light, hold phone steady, point at the card name at the top.</p>';
-        return;
+      const ac = await Scryfall.autocomplete(bestText);
+      let cands = (ac.data || []).slice(0, 5);
+
+      // If no results, try just the first word (catches partial OCR reads)
+      if (!cands.length && bestText.includes(' ')) {
+        const ac2 = await Scryfall.autocomplete(bestText.split(' ')[0]);
+        cands = (ac2.data || []).slice(0, 5);
       }
-      res.innerHTML = `<p class="dim" style="margin-bottom:.5rem">Looking up \u201c${Render.escapeHtml(cleaned)}\u201d\u2026</p>`;
-      const ac = await Scryfall.autocomplete(cleaned);
-      const cands = (ac.data || []).slice(0, 4);
+
       if (!cands.length) {
-        res.innerHTML = `<p class="error-text">No card found for \u201c${Render.escapeHtml(cleaned)}\u201d.</p><p class="dim small" style="margin-top:.4rem">Try scanning again with better lighting.</p>`;
+        res.innerHTML = `<p class="error-text">No card found for “${Render.escapeHtml(bestText)}”.</p>
+          <p class="dim small" style="margin-top:.4rem">OCR may have misread a letter. Try again in better light or use Upload.</p>`;
         return;
       }
-      res.innerHTML = '<p class="dim" style="margin-bottom:.5rem">Tap to add to collection:</p>' +
-        cands.map(n =>
-          `<div class="scan-match"><span class="scan-name">${Render.escapeHtml(n)}</span><button class="btn btn-sm btn-primary" data-action="scan-add" data-name="${Render.escapeHtml(n)}">Add</button></div>`
-        ).join('') +
-        `<p class="scan-status">Read: \u201c${Render.escapeHtml(cleaned)}\u201d</p>`;
+      res.innerHTML = buildCandidateHtml(cands, bestText, '');
     } catch (e) {
-      res.innerHTML = `<p class="error-text">OCR error: ${Render.escapeHtml(e.message)}</p>`;
+      res.innerHTML = `<p class="error-text">Lookup failed: ${Render.escapeHtml(e.message)}</p>`;
     }
   }
 
@@ -3885,12 +3995,8 @@ const Render = (() => {
     canvas.width  = video.videoWidth  || 1280;
     canvas.height = video.videoHeight || 720;
     canvas.getContext('2d').drawImage(video, 0, 0);
-    // Crop to the top 28% of the frame where the card name lives
-    const cropH = Math.floor(canvas.height * 0.28);
-    const crop  = document.createElement('canvas');
-    crop.width  = canvas.width; crop.height = cropH;
-    crop.getContext('2d').drawImage(canvas, 0, 0, canvas.width, cropH, 0, 0, canvas.width, cropH);
-    await runOcr(crop);
+    // Pass full canvas — runOcr does its own multi-band cropping
+    await runOcr(canvas);
   }
 
   async function scanFromUpload(file) {
@@ -3904,11 +4010,12 @@ const Render = (() => {
         i.onload = () => { URL.revokeObjectURL(url); ok(i); };
         i.onerror = err; i.src = url;
       });
-      const cropH = Math.floor(img.naturalHeight * 0.28);
-      const crop  = document.createElement('canvas');
-      crop.width  = img.naturalWidth; crop.height = cropH;
-      crop.getContext('2d').drawImage(img, 0, 0, img.naturalWidth, cropH, 0, 0, img.naturalWidth, cropH);
-      await runOcr(crop);
+      // Draw full image onto canvas, let runOcr handle cropping
+      const canvas = document.createElement('canvas');
+      canvas.width  = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      canvas.getContext('2d').drawImage(img, 0, 0);
+      await runOcr(canvas);
     } catch (e) {
       res.innerHTML = `<p class="error-text">Could not read image: ${Render.escapeHtml(e.message)}</p>`;
     }
