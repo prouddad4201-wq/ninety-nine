@@ -1137,6 +1137,60 @@ select { cursor: pointer; }
   #scan-video { max-height: 220px; }
 }
 
+/* ── Affiliate settings modal ────────────────────────────────────── */
+.aff-status-bar {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 14px; border-radius: 8px; margin-bottom: 1.25rem;
+  font-size: .85rem; font-weight: 600; border: 1px solid;
+  transition: background .2s, border-color .2s;
+}
+.aff-active  { background: rgba(26,224,128,.10); border-color: rgba(26,224,128,.35); color: var(--success); }
+.aff-inactive{ background: var(--surface-3); border-color: var(--border); color: var(--text-dim); }
+.aff-dot {
+  width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0;
+  background: currentColor;
+}
+.aff-active .aff-dot { box-shadow: 0 0 8px currentColor; animation: pulse-dot 2s ease infinite; }
+@keyframes pulse-dot { 0%,100%{opacity:1} 50%{opacity:.45} }
+
+.aff-step {
+  display: flex; gap: 14px; align-items: flex-start;
+  margin-bottom: 1.1rem; padding-bottom: 1.1rem;
+  border-bottom: 1px solid var(--border);
+}
+.aff-step:last-of-type { border-bottom: none; }
+.aff-step-num {
+  width: 28px; height: 28px; border-radius: 50%; flex-shrink: 0;
+  background: linear-gradient(135deg,var(--amber),var(--amber-hi));
+  color: var(--amber-ink); font-weight: 800; font-size: .82rem;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 2px 10px var(--amber-glow); margin-top: 1px;
+}
+.aff-step-body { min-width: 0; flex: 1; }
+.aff-step-title { font-weight: 700; font-size: .92rem; margin-bottom: .25rem; }
+.aff-step-desc { font-size: .82rem; color: var(--text-dim); line-height: 1.6; }
+.aff-code {
+  display: inline-block;
+  background: var(--surface-4); border: 1px solid var(--border-hi);
+  border-radius: 4px; padding: 2px 7px;
+  font-family: var(--font-mono); font-size: .78em;
+  color: var(--amber-hi); word-break: break-all;
+}
+.aff-advanced {
+  margin-top: .75rem;
+}
+.aff-advanced summary {
+  cursor: pointer; font-size: .78rem; color: var(--text-faint);
+  user-select: none;
+}
+.aff-advanced summary:hover { color: var(--text-dim); }
+.aff-earnings-note {
+  margin-top: 1rem; padding: 10px 14px;
+  background: var(--surface-3); border: 1px solid var(--border);
+  border-radius: 8px; font-size: .78rem; color: var(--text-dim);
+  line-height: 1.65;
+}
+
 </style>
 </head>
 <body>
@@ -1507,21 +1561,80 @@ select { cursor: pointer; }
 
   <!-- ===================== Settings modal ===================== -->
   <div id="settings-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="settings-title">
-    <div class="modal-content">
+    <div class="modal-content" style="max-width:580px">
       <button id="settings-close" type="button" class="modal-close" aria-label="Close settings">&times;</button>
-      <h2 id="settings-title">Buy links</h2>
-      <p class="modal-help">Every &ldquo;Buy&rdquo; button opens a TCGplayer search for that card. If you have a TCGplayer affiliate link (via Impact), paste your tracking template below and every buy link &mdash; including Mass Entry &mdash; will route through it.</p>
-      <div class="modal-field">
-        <label for="aff-base">TCGplayer search URL</label>
-        <input type="text" id="aff-base" spellcheck="false">
-        <p class="modal-help">Must include <code>{QUERY}</code> where the card name goes.</p>
+      <h2 id="settings-title">TCGPlayer Affiliate Setup</h2>
+
+      <!-- Status indicator -->
+      <div id="aff-status-bar" class="aff-status-bar aff-inactive">
+        <span id="aff-status-dot" class="aff-dot"></span>
+        <span id="aff-status-text">No affiliate ID set &mdash; Buy links go to TCGPlayer without tracking</span>
       </div>
-      <div class="modal-field">
-        <label for="aff-wrapper">Affiliate link wrapper (optional)</label>
-        <input type="text" id="aff-wrapper" spellcheck="false" placeholder="https://tcgplayer.pxf.io/...?u={URL}">
-        <p class="modal-help">Must include <code>{URL}</code> where the destination link goes. Leave blank to link straight to TCGplayer.</p>
+
+      <!-- Step 1: Sign up -->
+      <div class="aff-step">
+        <div class="aff-step-num">1</div>
+        <div class="aff-step-body">
+          <div class="aff-step-title">Sign up on Impact</div>
+          <div class="aff-step-desc">TCGPlayer runs their program through Impact.com. Apply at the link below &mdash; approval usually takes 1&ndash;3 days.</div>
+          <a href="https://app.impact.com/campaign-campaign-info-v2/TCGplayer.brand?io=O0MQFO/3HA8jFJ07Knpdj8IlOwxORvAM2ZELnhmXdGUVNwTC5FTTyS8fMwhf5QKO" target="_blank" rel="noopener" class="btn btn-secondary btn-sm" style="margin-top:.5rem;display:inline-flex">
+            Apply to TCGPlayer affiliate program &rarr;
+          </a>
+        </div>
       </div>
-      <button id="settings-save" type="button" class="btn btn-primary">Save</button>
+
+      <!-- Step 2: Get your Impact URL -->
+      <div class="aff-step">
+        <div class="aff-step-num">2</div>
+        <div class="aff-step-body">
+          <div class="aff-step-title">Copy your tracking URL from Impact</div>
+          <div class="aff-step-desc">
+            After approval: log into Impact &rarr; <strong>Brands</strong> &rarr; <strong>TCGPlayer</strong> &rarr; <strong>Links</strong> &rarr; copy the base tracking link.<br>
+            It looks like: <code class="aff-code">https://tcgplayer.pxf.io/c/XXXXXXX/...</code>
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 3: Paste it here -->
+      <div class="aff-step">
+        <div class="aff-step-num">3</div>
+        <div class="aff-step-body">
+          <div class="aff-step-title">Paste your Impact tracking URL here</div>
+          <div class="aff-step-desc">Every &ldquo;Buy&rdquo; button in the app will route through this link so you earn commission on purchases.</div>
+          <div class="modal-field" style="margin-top:.65rem">
+            <label for="aff-wrapper">Your Impact affiliate URL</label>
+            <input type="url" id="aff-wrapper" spellcheck="false"
+              placeholder="https://tcgplayer.pxf.io/c/1234567/...?u={URL}"
+              autocomplete="off" autocorrect="off" autocapitalize="off">
+            <p class="modal-help" style="margin-top:.35rem">
+              Must contain <code>{URL}</code> where TCGPlayer&rsquo;s link goes. Impact links already have the right format &mdash; just make sure the destination URL parameter reads <code>{URL}</code>.
+            </p>
+          </div>
+          <!-- Advanced: override base URL -->
+          <details class="aff-advanced">
+            <summary>Advanced: customize TCGPlayer search URL</summary>
+            <div class="modal-field" style="margin-top:.5rem">
+              <label for="aff-base">TCGPlayer search URL template</label>
+              <input type="text" id="aff-base" spellcheck="false">
+              <p class="modal-help">Must include <code>{QUERY}</code> where the card name goes. Leave blank for default.</p>
+            </div>
+          </details>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:.6rem;flex-wrap:wrap;margin-top:1rem">
+        <button id="settings-save" type="button" class="btn btn-primary">Save affiliate link</button>
+        <button id="aff-test-btn" type="button" class="btn btn-secondary">Test a buy link</button>
+        <button id="aff-clear-btn" type="button" class="btn btn-ghost">Clear</button>
+      </div>
+
+      <div id="aff-earnings-note" class="aff-earnings-note">
+        <strong>3.5% commission</strong> on every purchase &middot; 48-hour cookie &middot; Paid monthly via Impact &middot; $50 minimum payout<br>
+        <span style="font-size:.72rem;opacity:.7">FTC disclosure: disclose affiliate relationships to your audience. &ldquo;Affiliate link&rdquo; in your footer satisfies this.</span>
+      </div>
+
+      <!-- Hidden field kept for backwards compat -->
+      <input type="hidden" id="aff-base-hidden">
     </div>
   </div>
 
@@ -4394,18 +4507,51 @@ const Render = (() => {
   /* ------------------------------ Settings ----------------------- */
 
     /* ------------------------------ Settings ----------------------- */
-  function openSettings()  { $('#aff-base').value = state.affiliate.base; $('#aff-wrapper').value = state.affiliate.wrapper; $('#settings-modal').classList.remove('hidden'); }
+  function openSettings() {
+    const modal = $('#settings-modal');
+    if (!modal) return;
+    // Populate fields
+    const base = state.affiliate.base || '';
+    const wrapper = state.affiliate.wrapper || '';
+    const baseInput = $('#aff-base'); if (baseInput) baseInput.value = base;
+    const wrapperInput = $('#aff-wrapper'); if (wrapperInput) wrapperInput.value = wrapper;
+    updateAffStatus();
+    modal.classList.remove('hidden');
+  }
+
+  function updateAffStatus() {
+    const dot  = $('#aff-status-dot');
+    const text = $('#aff-status-text');
+    const bar  = $('#aff-status-bar');
+    if (!bar) return;
+    const active = !!(state.affiliate.wrapper && state.affiliate.wrapper.includes('{URL}'));
+    bar.className = 'aff-status-bar ' + (active ? 'aff-active' : 'aff-inactive');
+    if (text) text.textContent = active
+      ? '✓ Affiliate link active — all Buy buttons earn commission'
+      : 'No affiliate ID set — Buy links go to TCGPlayer without tracking';
+  }
   function closeSettings() { $('#settings-modal').classList.add('hidden'); }
   function saveSettings()  {
-    const base = $('#aff-base').value.trim() || state.affiliate.base;
-    const wrapper = $('#aff-wrapper').value.trim();
+    const wrapper = $('#aff-wrapper')?.value.trim() || '';
+    const baseRaw = $('#aff-base')?.value.trim() || '';
+    const base    = baseRaw || 'https://www.tcgplayer.com/search/magic/product?productLineName=magic&q={QUERY}';
     if (!base.includes('{QUERY}')) { toast('Base URL must include {QUERY}.', true); return; }
     if (wrapper && !wrapper.includes('{URL}')) { toast('Wrapper must include {URL}.', true); return; }
-    state.affiliate = { base, wrapper }; persistAffiliate(); closeSettings(); toast('Affiliate settings saved.');
+    state.affiliate = { base, wrapper };
+    persistAffiliate();
+    updateAffStatus();
+    closeSettings();
+    toast(wrapper ? '✓ Affiliate link saved — Buy buttons now earn commission.' : 'Settings saved.');
   }
-  function wrapAffiliate(url) { return state.affiliate.wrapper ? state.affiliate.wrapper.replace('{URL}', encodeURIComponent(url)) : url; }
-  function buildBuyLink(name) { return wrapAffiliate(state.affiliate.base.replace('{QUERY}', encodeURIComponent(name))); }
-  function massEntryLink()    { return wrapAffiliate('https://www.tcgplayer.com/massentry'); }
+  function wrapAffiliate(url) {
+    if (!state.affiliate.wrapper) return url;
+    return state.affiliate.wrapper.replace('{URL}', encodeURIComponent(url));
+  }
+  function buildBuyLink(name) {
+    const base = state.affiliate.base || 'https://www.tcgplayer.com/search/magic/product?productLineName=magic&q={QUERY}';
+    return wrapAffiliate(base.replace('{QUERY}', encodeURIComponent(name)));
+  }
+  function massEntryLink() { return wrapAffiliate('https://www.tcgplayer.com/massentry'); }
 
   /* ------------------------------ Export / share ----------------------------- */
   function copyToClipboard(text, msg) {
@@ -4527,6 +4673,21 @@ const Render = (() => {
     $('#settings-btn').addEventListener('click', openSettings);
     $('#settings-close').addEventListener('click', closeSettings);
     $('#settings-save').addEventListener('click', saveSettings);
+    $('#aff-test-btn')?.addEventListener('click', () => {
+      const w = $('#aff-wrapper')?.value.trim() || state.affiliate.wrapper;
+      const url = w
+        ? w.replace('{URL}', encodeURIComponent('https://www.tcgplayer.com/search/magic/product?productLineName=magic&q=Sol+Ring'))
+        : 'https://www.tcgplayer.com/search/magic/product?productLineName=magic&q=Sol+Ring';
+      window.open(url, '_blank', 'noopener');
+    });
+    $('#aff-clear-btn')?.addEventListener('click', () => {
+      if (!confirm('Remove affiliate link? Buy buttons will go to TCGPlayer without tracking.')) return;
+      if ($('#aff-wrapper')) $('#aff-wrapper').value = '';
+      if ($('#aff-base')) $('#aff-base').value = '';
+      state.affiliate = { base: 'https://www.tcgplayer.com/search/magic/product?productLineName=magic&q={QUERY}', wrapper: '' };
+      persistAffiliate(); updateAffStatus();
+      toast('Affiliate link cleared.');
+    });
     $('#printings-close').addEventListener('click', () => $('#printings-modal').classList.add('hidden'));
 
     document.body.addEventListener('click', (e) => {
