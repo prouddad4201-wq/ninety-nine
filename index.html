@@ -3834,49 +3834,27 @@ const Render = (() => {
     });
   }
 
-  /**
-   * Preprocess canvas: 3x upscale + greyscale + contrast boost
-   * Makes text much clearer for Tesseract
-   */
-  function preprocessForOcr(srcCanvas) {
-    const scale = 3;
-    const out = document.createElement('canvas');
-    out.width  = srcCanvas.width  * scale;
-    out.height = srcCanvas.height * scale;
-    const ctx = out.getContext('2d');
-    ctx.imageSmoothingEnabled = false;
-    ctx.drawImage(srcCanvas, 0, 0, out.width, out.height);
-    const id = ctx.getImageData(0, 0, out.width, out.height);
-    const d  = id.data;
-    for (let i = 0; i < d.length; i += 4) {
-      const grey = 0.299*d[i] + 0.587*d[i+1] + 0.114*d[i+2];
-      const c = grey < 128 ? Math.max(0, grey - 40) : Math.min(255, grey + 40);
-      d[i] = d[i+1] = d[i+2] = c;
-      // alpha unchanged
-    }
-    ctx.putImageData(id, 0, 0);
-    return out;
+  /** Score a text line for likelihood of being an MTG card name */
+  function scoreOcrLine(raw) {
+    const s = raw.replace(/[^A-Za-z0-9 ',\-.]/g, '').replace(/\s+/g, ' ').trim();
+    if (!s || s.length < 3 || s.length > 55) return { score: -1, text: '' };
+    const letters = (s.match(/[A-Za-z]/g) || []).length;
+    const total   = s.replace(/\s/g, '').length;
+    const ratio   = total ? letters / total : 0;
+    if (ratio < 0.45) return { score: -1, text: '' };     // too many numbers/symbols
+    if (/^\d+$/.test(s)) return { score: -1, text: '' }; // pure number
+    let score = ratio * 10 + Math.min(s.length, 25) * 0.3;
+    if (/^[A-Z]/.test(s))          score += 3; // starts with capital
+    if (/[a-z]/.test(s))           score += 2; // has lowercase
+    if (s.includes(' '))           score += 2; // multi-word
+    if (s.split(' ').length >= 2 && s.split(' ').length <= 5) score += 1; // 2-5 word names
+    // Penalise things that look like oracle text rather than names
+    if (/\b(add|tap|mana|you|your|target|each|when|if|enter|deal|draw|put|return|exile|destroy)\b/i.test(s)) score -= 4;
+    if (/^(add|the|a |an |in |of )$/i.test(s)) score = -1;
+    return { score, text: s };
   }
 
-  /** Crop canvas to vertical band defined by fraction of height */
-  function cropBand(src, yFrac0, yFrac1) {
-    const y0 = Math.floor(src.height * yFrac0);
-    const y1 = Math.floor(src.height * yFrac1);
-    const out = document.createElement('canvas');
-    out.width = src.width; out.height = y1 - y0;
-    out.getContext('2d').drawImage(src, 0, y0, src.width, out.height, 0, 0, src.width, out.height);
-    return out;
-  }
-
-  function buildCandidateHtml(cands, ocrText, note) {
-    return '<p class="dim" style="margin-bottom:.6rem">Tap to add to collection:</p>' +
-      cands.map(n =>
-        `<div class="scan-match"><span class="scan-name">${Render.escapeHtml(n)}</span>` +
-        `<button class="btn btn-sm btn-primary" data-action="scan-add" data-name="${Render.escapeHtml(n)}">Add</button></div>`
-      ).join('') +
-      `<p class="scan-status">Read: “${Render.escapeHtml(ocrText)}”${note ? ' ' + note : ''}</p>`;
-  }
-
+  /** Run OCR on the full canvas at multiple scales, return best card-name candidate */
   async function runOcr(sourceCanvas) {
     const res = $('#scan-result');
     res.innerHTML = '<p class="dim">Loading OCR engine…</p>';
@@ -3885,38 +3863,64 @@ const Render = (() => {
       res.innerHTML = '<p class="error-text">Couldn’t load OCR engine — check your internet connection.</p>';
       return;
     }
-
-    // Try 3 crop bands: just the name bar, top quarter, top half
-    // Multiple passes means we always catch the name regardless of photo framing
-    const bands = [
-      cropBand(sourceCanvas, 0.00, 0.12),
-      cropBand(sourceCanvas, 0.00, 0.28),
-      cropBand(sourceCanvas, 0.00, 0.50),
-    ];
-
-    res.innerHTML = '<p class="dim">Reading card name…</p>';
+    res.innerHTML = '<p class="dim">Scanning for card name…</p>';
 
     const tessOpts = {
-      tessedit_char_whitelist: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 ',-.",
+      // No char whitelist — real cards have punctuation, apostrophes etc.
+      // Let Tesseract find all text, we filter in JS
     };
 
     let bestText = '';
-    for (const band of bands) {
-      try {
-        const proc = preprocessForOcr(band);
-        const { data: { text } } = await window.Tesseract.recognize(proc, 'eng', tessOpts);
-        const candidate = cleanOcrText(text);
-        if (candidate && candidate.length > bestText.length) bestText = candidate;
-      } catch (_) {}
+    let bestScore = -1;
+
+    // Try OCR at 3 different scales and 2 PSM modes
+    // PSM 3 = fully auto (finds text anywhere)
+    // PSM 11 = sparse text (good for noisy backgrounds)
+    const scales  = [0.5, 0.75, 1.0];
+    const psms    = [3, 11];
+
+    for (const scale of scales) {
+      const w = Math.round(sourceCanvas.width  * scale);
+      const h = Math.round(sourceCanvas.height * scale);
+      const scaled = document.createElement('canvas');
+      scaled.width = w; scaled.height = h;
+      scaled.getContext('2d').drawImage(sourceCanvas, 0, 0, w, h);
+
+      // Greyscale + contrast boost
+      const ctx = scaled.getContext('2d');
+      const id  = ctx.getImageData(0, 0, w, h);
+      const d   = id.data;
+      for (let i = 0; i < d.length; i += 4) {
+        const grey = 0.299*d[i] + 0.587*d[i+1] + 0.114*d[i+2];
+        const c    = grey < 128 ? Math.max(0, grey-30) : Math.min(255, grey+30);
+        d[i] = d[i+1] = d[i+2] = c;
+      }
+      ctx.putImageData(id, 0, 0);
+
+      for (const psm of psms) {
+        try {
+          const { data: { text } } = await window.Tesseract.recognize(scaled, 'eng', {
+            ...tessOpts, tessedit_pageseg_mode: psm,
+          });
+          for (const line of text.split('\n')) {
+            const { score, text: clean } = scoreOcrLine(line.trim());
+            if (score > bestScore) { bestScore = score; bestText = clean; }
+          }
+        } catch (_) {}
+      }
+
+      // If we already found something good, stop early
+      if (bestScore >= 12) break;
     }
 
     if (!bestText || bestText.length < 2) {
-      res.innerHTML = `<p class="error-text">Couldn’t read the card name.</p>
-        <ul class="dim small" style="margin:.5rem 0 0 1.2rem;line-height:2">
-          <li>Card name must be visible at the <strong>top of the frame</strong></li>
-          <li>Use bright, even light — no glare</li>
-          <li>Hold phone flat and parallel to the card</li>
-          <li>Try the <strong>Upload image</strong> button for a cleaner photo</li>
+      res.innerHTML = `<p class="error-text">Couldn’t read a card name.</p>
+        <ul class="dim small" style="margin:.5rem 0 0 1.2rem;line-height:2.2">
+          <li>Fill the frame with the card</li>
+          <li>Keep the card name visible and in focus</li>
+          <li>Use bright even lighting, no glare</li>
+          <li>Hold the phone still and parallel to the card</li>
+          <li>Try the <strong>Upload image</strong> button for a saved photo</li>
         </ul>`;
       return;
     }
@@ -3924,100 +3928,32 @@ const Render = (() => {
     res.innerHTML = `<p class="dim">Searching for “${Render.escapeHtml(bestText)}”…</p>`;
 
     try {
-      const ac = await Scryfall.autocomplete(bestText);
-      let cands = (ac.data || []).slice(0, 5);
+      let cands = ((await Scryfall.autocomplete(bestText)).data || []).slice(0, 5);
 
-      // If no results, try just the first word (catches partial OCR reads)
+      // Fallback 1: try first two words if full name fails
       if (!cands.length && bestText.includes(' ')) {
-        const ac2 = await Scryfall.autocomplete(bestText.split(' ')[0]);
-        cands = (ac2.data || []).slice(0, 5);
+        const partial = bestText.split(' ').slice(0, 2).join(' ');
+        cands = ((await Scryfall.autocomplete(partial)).data || []).slice(0, 5);
+      }
+      // Fallback 2: try just the first word
+      if (!cands.length && bestText.includes(' ')) {
+        const first = bestText.split(' ')[0];
+        if (first.length >= 3) cands = ((await Scryfall.autocomplete(first)).data || []).slice(0, 5);
       }
 
       if (!cands.length) {
         res.innerHTML = `<p class="error-text">No card found for “${Render.escapeHtml(bestText)}”.</p>
-          <p class="dim small" style="margin-top:.4rem">OCR may have misread a letter. Try again in better light or use Upload.</p>`;
+          <p class="dim small" style="margin-top:.4rem">OCR may have misread a letter. Try again or use the Upload button.</p>`;
         return;
       }
-      res.innerHTML = buildCandidateHtml(cands, bestText, '');
+      res.innerHTML = '<p class="dim" style="margin-bottom:.6rem">Tap to add to collection:</p>' +
+        cands.map(n =>
+          `<div class="scan-match"><span class="scan-name">${Render.escapeHtml(n)}</span>` +
+          `<button class="btn btn-sm btn-primary" data-action="scan-add" data-name="${Render.escapeHtml(n)}">Add</button></div>`
+        ).join('') +
+        `<p class="scan-status">Read: “${Render.escapeHtml(bestText)}”</p>`;
     } catch (e) {
       res.innerHTML = `<p class="error-text">Lookup failed: ${Render.escapeHtml(e.message)}</p>`;
-    }
-  }
-
-  async function startScan() {
-    $('#scan-area').classList.remove('hidden');
-    const res = $('#scan-result');
-
-    // Must be HTTPS (except localhost for dev)
-    if (location.protocol !== 'https:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
-      res.innerHTML = `<p class="error-text">Camera requires HTTPS.</p>
-        <p class="dim small" style="margin-top:.5rem">The live version at <strong>prouddad4201-wq.github.io/ninety-nine</strong> works fine. Or use the Upload button below to scan a photo.</p>`;
-      return;
-    }
-    if (!navigator.mediaDevices?.getUserMedia) {
-      res.innerHTML = `<p class="error-text">Camera not supported in this browser.</p>
-        <p class="dim small" style="margin-top:.5rem">Use Chrome on Android or Safari on iPhone, or upload a photo instead.</p>`;
-      return;
-    }
-
-    res.innerHTML = '<p class="dim">Starting camera\u2026</p>';
-    try {
-      // Try rear camera first, fall back to any available camera
-      try {
-        scanStream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }
-        });
-      } catch (_) {
-        scanStream = await navigator.mediaDevices.getUserMedia({ video: true });
-      }
-      const v = $('#scan-video');
-      v.srcObject = scanStream;
-      await v.play().catch(() => {});
-      res.innerHTML = '<p class="dim">Point at the <strong>card name</strong> and tap Capture.</p>';
-    } catch (e) {
-      let msg = 'Camera unavailable.';
-      if (e.name === 'NotAllowedError' || e.name === 'PermissionDeniedError') {
-        msg = 'Camera permission denied. Tap the camera/lock icon in your browser address bar and allow camera access, then try again.';
-      } else if (e.name === 'NotFoundError' || e.name === 'DevicesNotFoundError') {
-        msg = 'No camera found on this device.';
-      } else if (e.name === 'NotReadableError' || e.name === 'TrackStartError') {
-        msg = 'Camera is being used by another app. Close it and try again.';
-      }
-      res.innerHTML = `<p class="error-text">${Render.escapeHtml(msg)}</p>
-        <p class="dim small" style="margin-top:.5rem">You can also use the <strong>Upload image</strong> button below.</p>`;
-    }
-  }
-
-  async function captureAndRecognize() {
-    const video = $('#scan-video'), canvas = $('#scan-canvas'), res = $('#scan-result');
-    if (!video || !canvas || !scanStream) return;
-    res.innerHTML = '<p class="dim">Capturing\u2026</p>';
-    canvas.width  = video.videoWidth  || 1280;
-    canvas.height = video.videoHeight || 720;
-    canvas.getContext('2d').drawImage(video, 0, 0);
-    // Pass full canvas — runOcr does its own multi-band cropping
-    await runOcr(canvas);
-  }
-
-  async function scanFromUpload(file) {
-    if (!file || !file.type.startsWith('image/')) return;
-    $('#scan-area').classList.remove('hidden');
-    const res = $('#scan-result');
-    res.innerHTML = '<p class="dim">Reading image\u2026</p>';
-    try {
-      const img = await new Promise((ok, err) => {
-        const i = new Image(), url = URL.createObjectURL(file);
-        i.onload = () => { URL.revokeObjectURL(url); ok(i); };
-        i.onerror = err; i.src = url;
-      });
-      // Draw full image onto canvas, let runOcr handle cropping
-      const canvas = document.createElement('canvas');
-      canvas.width  = img.naturalWidth;
-      canvas.height = img.naturalHeight;
-      canvas.getContext('2d').drawImage(img, 0, 0);
-      await runOcr(canvas);
-    } catch (e) {
-      res.innerHTML = `<p class="error-text">Could not read image: ${Render.escapeHtml(e.message)}</p>`;
     }
   }
 
@@ -4025,6 +3961,35 @@ const Render = (() => {
     await fetchAndAddToCollection(name);
     toast(`Added ${name} to collection.`);
     stopScan();
+  }
+
+  async function captureAndRecognize() {
+    const video = $('#scan-video'), canvas = $('#scan-canvas');
+    if (!video || !canvas || !scanStream) return;
+    $('#scan-result').innerHTML = '<p class="dim">Capturing\u2026</p>';
+    canvas.width  = video.videoWidth  || 1280;
+    canvas.height = video.videoHeight || 720;
+    canvas.getContext('2d').drawImage(video, 0, 0);
+    await runOcr(canvas);
+  }
+
+  async function scanFromUpload(file) {
+    if (!file || !file.type.startsWith('image/')) return;
+    $('#scan-area').classList.remove('hidden');
+    $('#scan-result').innerHTML = '<p class="dim">Reading image\u2026</p>';
+    try {
+      const img = await new Promise((ok, err) => {
+        const i = new Image(), url = URL.createObjectURL(file);
+        i.onload = () => { URL.revokeObjectURL(url); ok(i); };
+        i.onerror = err; i.src = url;
+      });
+      const canvas = document.createElement('canvas');
+      canvas.width = img.naturalWidth; canvas.height = img.naturalHeight;
+      canvas.getContext('2d').drawImage(img, 0, 0);
+      await runOcr(canvas);
+    } catch (e) {
+      $('#scan-result').innerHTML = `<p class="error-text">Could not read image: ${Render.escapeHtml(e.message)}</p>`;
+    }
   }
 
   /* ============================================================
