@@ -1038,6 +1038,105 @@ select { cursor: pointer; }
   .card-tile:hover, .rec-card:hover { transform: none; }
 }
 
+/* ── Scan UI ─────────────────────────────────────────────────────── */
+.scan-area {
+  background: var(--surface-2);
+  border: 1px solid var(--border-hi);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  margin-bottom: .75rem;
+}
+.scan-camera-wrap {
+  position: relative;
+  width: 100%;
+  background: #000;
+  max-height: 300px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+#scan-video {
+  width: 100%;
+  max-height: 300px;
+  object-fit: cover;
+  display: block;
+}
+/* Aim guide overlay */
+.scan-aim-overlay {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  pointer-events: none;
+}
+.scan-aim-box {
+  width: 75%; height: 18%;
+  border: 2px solid rgba(245,166,35,.8);
+  border-radius: 6px;
+  box-shadow: 0 0 0 2000px rgba(0,0,0,.35);
+}
+.scan-aim-label {
+  margin-top: 8px;
+  font-size: .72rem;
+  color: rgba(245,166,35,.9);
+  font-weight: 600;
+  letter-spacing: .04em;
+  text-shadow: 0 1px 4px rgba(0,0,0,.8);
+}
+.scan-camera-status {
+  position: absolute; bottom: 8px; left: 0; right: 0;
+  text-align: center; font-size: .75rem; color: rgba(255,255,255,.7);
+}
+/* Controls row */
+.scan-controls-row {
+  display: flex; gap: .5rem; padding: .75rem 1rem;
+  background: var(--surface-3);
+  border-top: 1px solid var(--border);
+}
+.scan-controls-row .btn { flex: 1; font-size: .82rem; }
+.scan-auto-on  { background: rgba(26,224,128,.18) !important; border-color: var(--success) !important; color: var(--success) !important; }
+.scan-auto-off { }
+/* Result */
+.scan-result { padding: .75rem 1rem; min-height: 40px; }
+/* Full card match preview */
+.scan-match-full {
+  display: grid;
+  grid-template-columns: 90px 1fr;
+  gap: 12px;
+  padding: 4px 0;
+}
+.scan-card-img {
+  width: 90px;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0,0,0,.5);
+  display: block;
+}
+.scan-match-info { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.scan-match-name { font-weight: 700; font-size: .95rem; color: var(--text); line-height: 1.2; }
+.scan-match-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: .75rem; color: var(--text-dim); }
+.scan-match-price { color: var(--amber-hi); font-family: var(--font-mono); font-weight: 700; }
+.scan-match-oracle { font-size: .72rem; color: var(--text-dim); line-height: 1.55; }
+.scan-match-actions { margin-top: 4px; }
+.scan-match-actions .btn { font-size: .8rem; padding: 8px 14px; }
+.scan-status { font-size: .68rem; color: var(--text-faint); font-style: italic; margin-top: 8px; }
+/* Upload row */
+.scan-upload-row {
+  display: flex; align-items: center; gap: 10px;
+  flex-wrap: wrap; margin-bottom: .5rem;
+}
+.scan-upload-label {
+  cursor: pointer;
+  display: inline-flex; align-items: center; gap: 6px;
+}
+@media (max-width: 640px) {
+  .scan-match-full { grid-template-columns: 70px 1fr; gap: 9px; }
+  .scan-card-img { width: 70px; border-radius: 6px; }
+  .scan-controls-row { flex-wrap: wrap; }
+  .scan-controls-row .btn { flex: 1 1 auto; min-width: 80px; }
+  .scan-camera-wrap { max-height: 220px; }
+  #scan-video { max-height: 220px; }
+}
+
 </style>
 </head>
 <body>
@@ -1297,24 +1396,42 @@ select { cursor: pointer; }
         <button id="coll-import-btn" type="button" class="btn btn-ghost">Bulk import</button>
       </div>
 
-      <!-- Scan area (hidden until activated) -->
+      <!-- Scan / camera panel -->
       <div id="scan-area" class="scan-area hidden">
-        <div class="scan-controls">
+        <!-- Live camera view -->
+        <div class="scan-camera-wrap" id="scan-camera-wrap">
           <video id="scan-video" autoplay playsinline muted></video>
-          <canvas id="scan-canvas" style="display:none"></canvas>
-          <div class="scan-btn-row">
-            <button id="scan-capture-btn" type="button" class="btn btn-primary">📸 Capture</button>
-            <button id="scan-stop-btn" type="button" class="btn btn-ghost">Stop camera</button>
+          <!-- Aim guide overlay -->
+          <div class="scan-aim-overlay">
+            <div class="scan-aim-box"></div>
+            <span class="scan-aim-label">Point at card name</span>
           </div>
+          <div class="scan-camera-status" id="scan-camera-status">Camera starting…</div>
         </div>
+        <canvas id="scan-canvas" style="display:none"></canvas>
+
+        <!-- Controls -->
+        <div class="scan-controls-row">
+          <button id="scan-capture-btn" type="button" class="btn btn-primary">
+            📸 Capture
+          </button>
+          <button id="scan-auto-btn" type="button" class="btn btn-secondary scan-auto-off" title="Auto-scan every 2 seconds">
+            ⟳ Auto
+          </button>
+          <button id="scan-stop-btn" type="button" class="btn btn-ghost">✕ Close</button>
+        </div>
+
+        <!-- Result area with card preview -->
         <div id="scan-result" class="scan-result"></div>
       </div>
+
+      <!-- Upload fallback — always visible, opens native camera on mobile -->
       <div class="scan-upload-row">
-        <label class="btn btn-secondary btn-sm" style="cursor:pointer;display:inline-flex;align-items:center;gap:6px;">
-          🖼 Upload card image instead
-          <input type="file" id="scan-upload-input" accept="image/*" style="display:none">
+        <label class="btn btn-secondary btn-sm scan-upload-label">
+          🖼 Scan from photo
+          <input type="file" id="scan-upload-input" accept="image/*" capture="environment" style="display:none">
         </label>
-        <span class="dim small" style="display:block;margin-top:6px;font-size:.75rem">Take a photo with your native camera app then select it here — no live camera needed</span>
+        <span class="dim small">Opens camera or photo library — most reliable option</span>
       </div>
 
       <!-- Bulk import panel (collapsed by default) -->
@@ -3815,92 +3932,156 @@ const Render = (() => {
   }
 
   /* ── Scan / OCR ──────────────────────────────────────────────────── */
-  let scanStream = null;
+
+  /* ================================================================
+     SCAN — camera + OCR + Scryfall fuzzy lookup
+     Full pipeline: live camera or uploaded image → Tesseract OCR →
+     Scryfall namedFuzzy (handles OCR typos) → full card data → preview
+  ================================================================ */
+  let scanStream   = null;
+  let scanAutoLoop = null;   // setInterval handle for auto-scan mode
+  let scanBusy     = false;  // prevent concurrent OCR runs
 
   function stopScan() {
-    if (scanStream) { scanStream.getTracks().forEach(t => t.stop()); scanStream = null; }
+    if (scanAutoLoop) { clearInterval(scanAutoLoop); scanAutoLoop = null; }
+    if (scanStream)   { scanStream.getTracks().forEach(t => t.stop()); scanStream = null; }
     $('#scan-area')?.classList.add('hidden');
     const v = $('#scan-video'); if (v) v.srcObject = null;
+    scanBusy = false;
+    setAutoBtn(false);
+  }
+
+  function setAutoBtn(on) {
+    const b = $('#scan-auto-btn');
+    if (!b) return;
+    b.classList.toggle('scan-auto-on',  on);
+    b.classList.toggle('scan-auto-off', !on);
+    b.textContent = on ? '⟳ Auto ON' : '⟳ Auto';
   }
 
   async function loadTesseract() {
     if (window.Tesseract) return;
-    await new Promise((ok, err) => {
+    await new Promise((ok, fail) => {
       const s = document.createElement('script');
       s.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
       s.onload = ok;
-      s.onerror = () => err(new Error('Failed to load OCR engine. Check your internet connection.'));
+      s.onerror = () => fail(new Error('Failed to load OCR engine — check internet connection.'));
       document.head.appendChild(s);
     });
   }
 
-  /** Score a text line for likelihood of being an MTG card name */
+  async function startScan() {
+    const area   = $('#scan-area');
+    const status = $('#scan-camera-status');
+    area.classList.remove('hidden');
+    if (status) status.textContent = 'Starting camera…';
+
+    // HTTPS guard
+    if (location.protocol !== 'https:' && !['localhost','127.0.0.1'].includes(location.hostname)) {
+      if (status) status.textContent = '';
+      $('#scan-result').innerHTML =
+        `<p class="error-text">Camera requires HTTPS.</p>
+         <p class="dim small" style="margin-top:.4rem">Use the live site or the <strong>Scan from photo</strong> button below.</p>`;
+      return;
+    }
+    if (!navigator.mediaDevices?.getUserMedia) {
+      if (status) status.textContent = '';
+      $('#scan-result').innerHTML =
+        `<p class="error-text">Camera not available in this browser.</p>
+         <p class="dim small" style="margin-top:.4rem">Use the <strong>Scan from photo</strong> button below.</p>`;
+      return;
+    }
+
+    try {
+      // Prefer rear camera; fall back to any
+      try {
+        scanStream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } }
+        });
+      } catch (_) {
+        scanStream = await navigator.mediaDevices.getUserMedia({ video: true });
+      }
+      const v = $('#scan-video');
+      v.srcObject = scanStream;
+      await v.play().catch(() => {});
+      if (status) status.textContent = '';
+      $('#scan-result').innerHTML = '<p class="dim small" style="text-align:center">Tap <strong>Capture</strong> or enable <strong>Auto</strong> to scan continuously.</p>';
+    } catch (e) {
+      let msg = 'Camera unavailable.';
+      if (e.name === 'NotAllowedError')  msg = 'Camera permission denied — tap the lock icon in your address bar to allow it.';
+      if (e.name === 'NotFoundError')    msg = 'No camera found on this device.';
+      if (e.name === 'NotReadableError') msg = 'Camera in use by another app — close it and try again.';
+      if (status) status.textContent = '';
+      $('#scan-result').innerHTML =
+        `<p class="error-text">\${Render.escapeHtml(msg)}</p>
+         <p class="dim small" style="margin-top:.4rem">Use the <strong>Scan from photo</strong> button below.</p>`;
+    }
+  }
+
+  /** Score a text line: high = looks like an MTG card name */
   function scoreOcrLine(raw) {
-    const s = raw.replace(/[^A-Za-z0-9 ',\-.]/g, '').replace(/\s+/g, ' ').trim();
-    if (!s || s.length < 3 || s.length > 55) return { score: -1, text: '' };
+    const s = raw.replace(/[^A-Za-z0-9 ',\-.']/g, '').replace(/\s+/g, ' ').trim();
+    if (!s || s.length < 2 || s.length > 55) return { score: -1, text: '' };
     const letters = (s.match(/[A-Za-z]/g) || []).length;
-    const total   = s.replace(/\s/g, '').length;
-    const ratio   = total ? letters / total : 0;
-    if (ratio < 0.45) return { score: -1, text: '' };     // too many numbers/symbols
-    if (/^\d+$/.test(s)) return { score: -1, text: '' }; // pure number
+    const total   = s.replace(/\s/g, '').length || 1;
+    const ratio   = letters / total;
+    if (ratio < 0.45) return { score: -1, text: '' };
+    if (/^[\d\/]+$/.test(s)) return { score: -1, text: '' };  // collector number
     let score = ratio * 10 + Math.min(s.length, 25) * 0.3;
-    if (/^[A-Z]/.test(s))          score += 3; // starts with capital
-    if (/[a-z]/.test(s))           score += 2; // has lowercase
-    if (s.includes(' '))           score += 2; // multi-word
-    if (s.split(' ').length >= 2 && s.split(' ').length <= 5) score += 1; // 2-5 word names
-    // Penalise things that look like oracle text rather than names
-    if (/\b(add|tap|mana|you|your|target|each|when|if|enter|deal|draw|put|return|exile|destroy)\b/i.test(s)) score -= 4;
-    if (/^(add|the|a |an |in |of )$/i.test(s)) score = -1;
+    if (/^[A-Z]/.test(s)) score += 3;
+    if (/[a-z]/.test(s))  score += 2;
+    if (s.includes(' '))  score += 2;
+    const words = s.split(' ');
+    if (words.length >= 2 && words.length <= 6) score += 1;
+    // Penalise oracle text keywords
+    if (/\b(add|tap|mana|you|your|target|each|when|whenever|if|enter|deal|draw|put|return|exile|destroy|counter|create|look|attach|equip|enchant)\b/i.test(s)) score -= 5;
+    if (/copyright|wizards|coast|reserved|all rights/i.test(s)) score = -1;
     return { score, text: s };
   }
 
-  /** Run OCR on the full canvas at multiple scales, return best card-name candidate */
+  /**
+   * Core OCR + lookup pipeline.
+   * Runs Tesseract on full canvas at 3 scales, picks best card-name line,
+   * then hits Scryfall namedFuzzy (designed for OCR typos) for full card data.
+   */
   async function runOcr(sourceCanvas) {
     const res = $('#scan-result');
-    res.innerHTML = '<p class="dim">Loading OCR engine…</p>';
+    if (scanBusy) return;
+    scanBusy = true;
+
     try { await loadTesseract(); }
     catch (e) {
-      res.innerHTML = '<p class="error-text">Couldn’t load OCR engine — check your internet connection.</p>';
-      return;
+      res.innerHTML = `<p class="error-text">OCR engine failed to load — check your internet connection.</p>`;
+      scanBusy = false; return;
     }
-    res.innerHTML = '<p class="dim">Scanning for card name…</p>';
 
-    const tessOpts = {
-      // No char whitelist — real cards have punctuation, apostrophes etc.
-      // Let Tesseract find all text, we filter in JS
-    };
-
-    let bestText = '';
-    let bestScore = -1;
-
-    // Try OCR at 3 different scales and 2 PSM modes
-    // PSM 3 = fully auto (finds text anywhere)
-    // PSM 11 = sparse text (good for noisy backgrounds)
-    const scales  = [0.5, 0.75, 1.0];
-    const psms    = [3, 11];
+    // Run at 3 scales: smaller = faster, larger = more accurate for small text
+    const scales = [0.5, 0.75, 1.0];
+    let bestText = ''; let bestScore = -1;
 
     for (const scale of scales) {
       const w = Math.round(sourceCanvas.width  * scale);
       const h = Math.round(sourceCanvas.height * scale);
-      const scaled = document.createElement('canvas');
-      scaled.width = w; scaled.height = h;
-      scaled.getContext('2d').drawImage(sourceCanvas, 0, 0, w, h);
+      if (w < 100 || h < 100) continue;
+
+      const tmp = document.createElement('canvas');
+      tmp.width = w; tmp.height = h;
+      const ctx = tmp.getContext('2d');
+      ctx.drawImage(sourceCanvas, 0, 0, w, h);
 
       // Greyscale + contrast boost
-      const ctx = scaled.getContext('2d');
-      const id  = ctx.getImageData(0, 0, w, h);
-      const d   = id.data;
+      const id = ctx.getImageData(0, 0, w, h); const d = id.data;
       for (let i = 0; i < d.length; i += 4) {
-        const grey = 0.299*d[i] + 0.587*d[i+1] + 0.114*d[i+2];
-        const c    = grey < 128 ? Math.max(0, grey-30) : Math.min(255, grey+30);
+        const g = 0.299*d[i] + 0.587*d[i+1] + 0.114*d[i+2];
+        const c = g < 128 ? Math.max(0, g-30) : Math.min(255, g+30);
         d[i] = d[i+1] = d[i+2] = c;
       }
       ctx.putImageData(id, 0, 0);
 
-      for (const psm of psms) {
+      for (const psm of [3, 11]) {
         try {
-          const { data: { text } } = await window.Tesseract.recognize(scaled, 'eng', {
-            ...tessOpts, tessedit_pageseg_mode: psm,
+          const { data: { text } } = await window.Tesseract.recognize(tmp, 'eng', {
+            tessedit_pageseg_mode: psm,
           });
           for (const line of text.split('\n')) {
             const { score, text: clean } = scoreOcrLine(line.trim());
@@ -3908,89 +4089,152 @@ const Render = (() => {
           }
         } catch (_) {}
       }
-
-      // If we already found something good, stop early
-      if (bestScore >= 12) break;
+      if (bestScore >= 12) break; // good enough, stop early
     }
 
-    if (!bestText || bestText.length < 2) {
-      res.innerHTML = `<p class="error-text">Couldn’t read a card name.</p>
-        <ul class="dim small" style="margin:.5rem 0 0 1.2rem;line-height:2.2">
-          <li>Fill the frame with the card</li>
-          <li>Keep the card name visible and in focus</li>
-          <li>Use bright even lighting, no glare</li>
-          <li>Hold the phone still and parallel to the card</li>
-          <li>Try the <strong>Upload image</strong> button for a saved photo</li>
-        </ul>`;
-      return;
+    if (!bestText) {
+      if (!scanAutoLoop) { // only show "failed" message when not auto-scanning
+        res.innerHTML =
+          `<p class="error-text">Couldn’t read a card name.</p>
+           <ul class="dim small" style="margin:.4rem 0 0 1.2rem;line-height:2.2">
+             <li>Fill the frame with the card — name at the top</li>
+             <li>Bright, even light; no glare or shadows</li>
+             <li>Hold phone flat and steady</li>
+             <li>Try <strong>Scan from photo</strong> below for best results</li>
+           </ul>`;
+      }
+      scanBusy = false; return;
     }
 
-    res.innerHTML = `<p class="dim">Searching for “${Render.escapeHtml(bestText)}”…</p>`;
+    // ── Scryfall fuzzy lookup — handles OCR typos perfectly ──────────
+    res.innerHTML = `<p class="dim">Found: “\${Render.escapeHtml(bestText)}” — looking up…</p>`;
+    let card = null;
 
+    // 1. namedFuzzy — Scryfall's own typo-tolerant endpoint
     try {
-      let cands = ((await Scryfall.autocomplete(bestText)).data || []).slice(0, 5);
+      card = await Scryfall.namedFuzzy(bestText);
+    } catch (_) {}
 
-      // Fallback 1: try first two words if full name fails
-      if (!cands.length && bestText.includes(' ')) {
-        const partial = bestText.split(' ').slice(0, 2).join(' ');
-        cands = ((await Scryfall.autocomplete(partial)).data || []).slice(0, 5);
-      }
-      // Fallback 2: try just the first word
-      if (!cands.length && bestText.includes(' ')) {
-        const first = bestText.split(' ')[0];
-        if (first.length >= 3) cands = ((await Scryfall.autocomplete(first)).data || []).slice(0, 5);
-      }
-
-      if (!cands.length) {
-        res.innerHTML = `<p class="error-text">No card found for “${Render.escapeHtml(bestText)}”.</p>
-          <p class="dim small" style="margin-top:.4rem">OCR may have misread a letter. Try again or use the Upload button.</p>`;
-        return;
-      }
-      res.innerHTML = '<p class="dim" style="margin-bottom:.6rem">Tap to add to collection:</p>' +
-        cands.map(n =>
-          `<div class="scan-match"><span class="scan-name">${Render.escapeHtml(n)}</span>` +
-          `<button class="btn btn-sm btn-primary" data-action="scan-add" data-name="${Render.escapeHtml(n)}">Add</button></div>`
-        ).join('') +
-        `<p class="scan-status">Read: “${Render.escapeHtml(bestText)}”</p>`;
-    } catch (e) {
-      res.innerHTML = `<p class="error-text">Lookup failed: ${Render.escapeHtml(e.message)}</p>`;
+    // 2. autocomplete + named — fallback if fuzzy returns nothing
+    if (!card) {
+      try {
+        const ac = await Scryfall.autocomplete(bestText);
+        if (ac.data && ac.data[0]) card = await Scryfall.named(ac.data[0]);
+      } catch (_) {}
     }
+
+    // 3. First-word fuzzy fallback
+    if (!card && bestText.includes(' ')) {
+      try {
+        const ac2 = await Scryfall.autocomplete(bestText.split(' ')[0]);
+        if (ac2.data && ac2.data[0]) card = await Scryfall.named(ac2.data[0]);
+      } catch (_) {}
+    }
+
+    if (!card) {
+      res.innerHTML =
+        `<p class="error-text">No card matched “\${Render.escapeHtml(bestText)}”.</p>
+         <p class="dim small" style="margin-top:.4rem">Try again with better lighting or use the Upload button.</p>`;
+      scanBusy = false; return;
+    }
+
+    // ── Render full card match with image ────────────────────────────
+    const imgUrl = card.image_uris?.normal
+      || card.card_faces?.[0]?.image_uris?.normal
+      || '';
+    const price  = cardPriceUsd(card);
+    const owned  = state.collection.has(card.name.toLowerCase());
+
+    res.innerHTML = buildScanResultHtml(card, bestText);
+
+    scanBusy = false;
   }
 
-  async function addScannedCard(name) {
-    await fetchAndAddToCollection(name);
-    toast(`Added ${name} to collection.`);
-    stopScan();
+  function buildScanResultHtml(card, ocrText) {
+    const imgUrl = card.image_uris?.normal || card.card_faces?.[0]?.image_uris?.normal || '';
+    const price  = cardPriceUsd(card);
+    const owned  = state.collection.has(card.name.toLowerCase());
+    const imgTag = imgUrl
+      ? '<img class="scan-card-img" src="' + Render.escapeHtml(imgUrl) + '" alt="' + Render.escapeHtml(card.name) + '" loading="lazy">'
+      : '';
+    const priceTag = price != null ? '<span class="scan-match-price">$' + price.toFixed(2) + '</span>' : '';
+    const ownedTag = owned ? '<span class="badge badge-owned">In collection</span>' : '';
+    const oracle   = (card.oracle_text || '').slice(0, 130) + ((card.oracle_text || '').length > 130 ? '…' : '');
+    const addBtn   = '<button class="btn btn-primary" data-action="scan-add-card" data-name="' + Render.escapeHtml(card.name) + '">' + (owned ? '+ Add another' : '+ Add to collection') + '</button>';
+    return '<div class="scan-match-full">'
+      + imgTag
+      + '<div class="scan-match-info">'
+      + '<div class="scan-match-name">' + Render.escapeHtml(card.name) + '</div>'
+      + '<div class="scan-match-meta"><span>' + Render.escapeHtml(card.type_line || '') + '</span>' + priceTag + ownedTag + '</div>'
+      + '<div class="scan-match-oracle">' + Render.escapeHtml(oracle) + '</div>'
+      + '<div class="scan-match-actions">' + addBtn + '</div>'
+      + '</div></div>'
+      + '<p class="scan-status">OCR read: “' + Render.escapeHtml(ocrText) + '”</p>';
   }
 
-  async function captureAndRecognize() {
+
+  function captureFrame() {
     const video = $('#scan-video'), canvas = $('#scan-canvas');
-    if (!video || !canvas || !scanStream) return;
-    $('#scan-result').innerHTML = '<p class="dim">Capturing\u2026</p>';
+    if (!video || !canvas || !scanStream) return null;
     canvas.width  = video.videoWidth  || 1280;
     canvas.height = video.videoHeight || 720;
     canvas.getContext('2d').drawImage(video, 0, 0);
+    return canvas;
+  }
+
+  async function captureAndRecognize() {
+    const canvas = captureFrame();
+    if (!canvas) return;
+    $('#scan-result').innerHTML = '<p class="dim">Scanning…</p>';
     await runOcr(canvas);
+  }
+
+  function toggleAutoScan() {
+    if (scanAutoLoop) {
+      clearInterval(scanAutoLoop);
+      scanAutoLoop = null;
+      setAutoBtn(false);
+    } else {
+      setAutoBtn(true);
+      scanAutoLoop = setInterval(async () => {
+        if (scanBusy || !scanStream) return;
+        const canvas = captureFrame();
+        if (canvas) await runOcr(canvas);
+      }, 2500);
+    }
   }
 
   async function scanFromUpload(file) {
     if (!file || !file.type.startsWith('image/')) return;
     $('#scan-area').classList.remove('hidden');
-    $('#scan-result').innerHTML = '<p class="dim">Reading image\u2026</p>';
+    const res = $('#scan-result');
+    res.innerHTML = '<p class="dim">Reading image…</p>';
     try {
       const img = await new Promise((ok, err) => {
         const i = new Image(), url = URL.createObjectURL(file);
         i.onload = () => { URL.revokeObjectURL(url); ok(i); };
         i.onerror = err; i.src = url;
       });
-      const canvas = document.createElement('canvas');
-      canvas.width = img.naturalWidth; canvas.height = img.naturalHeight;
-      canvas.getContext('2d').drawImage(img, 0, 0);
-      await runOcr(canvas);
+      const c = document.createElement('canvas');
+      c.width = img.naturalWidth; c.height = img.naturalHeight;
+      c.getContext('2d').drawImage(img, 0, 0);
+      await runOcr(c);
     } catch (e) {
-      $('#scan-result').innerHTML = `<p class="error-text">Could not read image: ${Render.escapeHtml(e.message)}</p>`;
+      res.innerHTML = `<p class="error-text">Could not read image: \${Render.escapeHtml(e.message)}</p>`;
+      scanBusy = false;
     }
   }
+
+  async function addScannedCard(name) {
+    await fetchAndAddToCollection(name);
+    // Keep scan open so user can scan next card
+    $('#scan-result').innerHTML =
+      `<p class="dim" style="color:var(--success)">✓ Added \${Render.escapeHtml(name)} to collection.</p>
+       <p class="dim small" style="margin-top:.3rem">Scan another card or tap ✕ Close.</p>`;
+    scanBusy = false;
+  }
+
+
 
   /* ============================================================
      SAVED DECKS — save / load / delete named deck snapshots
@@ -4273,10 +4517,11 @@ const Render = (() => {
       $('#scan-area').classList.contains('hidden') ? startScan() : stopScan();
     });
     $('#scan-capture-btn')?.addEventListener('click', captureAndRecognize);
+    $('#scan-auto-btn')?.addEventListener('click', toggleAutoScan);
     $('#scan-stop-btn')?.addEventListener('click', stopScan);
     $('#scan-upload-input')?.addEventListener('change', e => {
       if (e.target.files[0]) scanFromUpload(e.target.files[0]);
-      e.target.value = ''; // reset so same file can be re-selected
+      e.target.value = '';
     });
 
     $('#settings-btn').addEventListener('click', openSettings);
@@ -4309,7 +4554,8 @@ const Render = (() => {
         }
         case 'open-massentry': window.open(massEntryLink(), '_blank', 'noopener'); break;
         case 'load-more':      runSearch(state.search.query, true); break;
-        case 'scan-add':       addScannedCard(btn.dataset.name); break;
+        case 'scan-add':
+        case 'scan-add-card':  addScannedCard(btn.dataset.name); break;
         case 'coll-remove':    removeCardFromCollection(btn.dataset.name); break;
         default: break;
       }
