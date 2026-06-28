@@ -1303,11 +1303,18 @@ select { cursor: pointer; }
           <video id="scan-video" autoplay playsinline muted></video>
           <canvas id="scan-canvas" style="display:none"></canvas>
           <div class="scan-btn-row">
-            <button id="scan-capture-btn" type="button" class="btn btn-primary">📸 Capture &amp; recognize</button>
+            <button id="scan-capture-btn" type="button" class="btn btn-primary">📸 Capture</button>
             <button id="scan-stop-btn" type="button" class="btn btn-ghost">Stop camera</button>
           </div>
         </div>
         <div id="scan-result" class="scan-result"></div>
+      </div>
+      <div class="scan-upload-row">
+        <label class="btn btn-secondary btn-sm" style="cursor:pointer;display:inline-flex;align-items:center;gap:6px;">
+          🖼 Upload card image instead
+          <input type="file" id="scan-upload-input" accept="image/*" style="display:none">
+        </label>
+        <span class="dim small" style="display:block;margin-top:6px;font-size:.75rem">Take a photo with your native camera app then select it here — no live camera needed</span>
       </div>
 
       <!-- Bulk import panel (collapsed by default) -->
@@ -3778,58 +3785,138 @@ const Render = (() => {
 
   /* ── Scan / OCR ──────────────────────────────────────────────────── */
   let scanStream = null;
+
   function stopScan() {
     if (scanStream) { scanStream.getTracks().forEach(t => t.stop()); scanStream = null; }
     $('#scan-area')?.classList.add('hidden');
     const v = $('#scan-video'); if (v) v.srcObject = null;
   }
+
+  async function loadTesseract() {
+    if (window.Tesseract) return;
+    await new Promise((ok, err) => {
+      const s = document.createElement('script');
+      s.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
+      s.onload = ok;
+      s.onerror = () => err(new Error('Failed to load OCR engine. Check your internet connection.'));
+      document.head.appendChild(s);
+    });
+  }
+
+  async function runOcr(imageSource) {
+    const res = $('#scan-result');
+    res.innerHTML = '<p class="dim">Loading OCR engine\u2026</p>';
+    try {
+      await loadTesseract();
+      res.innerHTML = '<p class="dim">Recognizing text\u2026</p>';
+      const { data: { text } } = await window.Tesseract.recognize(imageSource, 'eng', {
+        tessedit_char_whitelist: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 ',-.",
+      });
+      const cleaned = cleanOcrText(text);
+      if (!cleaned || cleaned.length < 2) {
+        res.innerHTML = '<p class="error-text">Couldn\u2019t read the card name.</p><p class="dim small" style="margin-top:.4rem">Tips: more light, hold phone steady, point at the card name at the top.</p>';
+        return;
+      }
+      res.innerHTML = `<p class="dim" style="margin-bottom:.5rem">Looking up \u201c${Render.escapeHtml(cleaned)}\u201d\u2026</p>`;
+      const ac = await Scryfall.autocomplete(cleaned);
+      const cands = (ac.data || []).slice(0, 4);
+      if (!cands.length) {
+        res.innerHTML = `<p class="error-text">No card found for \u201c${Render.escapeHtml(cleaned)}\u201d.</p><p class="dim small" style="margin-top:.4rem">Try scanning again with better lighting.</p>`;
+        return;
+      }
+      res.innerHTML = '<p class="dim" style="margin-bottom:.5rem">Tap to add to collection:</p>' +
+        cands.map(n =>
+          `<div class="scan-match"><span class="scan-name">${Render.escapeHtml(n)}</span><button class="btn btn-sm btn-primary" data-action="scan-add" data-name="${Render.escapeHtml(n)}">Add</button></div>`
+        ).join('') +
+        `<p class="scan-status">Read: \u201c${Render.escapeHtml(cleaned)}\u201d</p>`;
+    } catch (e) {
+      res.innerHTML = `<p class="error-text">OCR error: ${Render.escapeHtml(e.message)}</p>`;
+    }
+  }
+
   async function startScan() {
     $('#scan-area').classList.remove('hidden');
     const res = $('#scan-result');
+
+    // Must be HTTPS (except localhost for dev)
+    if (location.protocol !== 'https:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
+      res.innerHTML = `<p class="error-text">Camera requires HTTPS.</p>
+        <p class="dim small" style="margin-top:.5rem">The live version at <strong>prouddad4201-wq.github.io/ninety-nine</strong> works fine. Or use the Upload button below to scan a photo.</p>`;
+      return;
+    }
+    if (!navigator.mediaDevices?.getUserMedia) {
+      res.innerHTML = `<p class="error-text">Camera not supported in this browser.</p>
+        <p class="dim small" style="margin-top:.5rem">Use Chrome on Android or Safari on iPhone, or upload a photo instead.</p>`;
+      return;
+    }
+
     res.innerHTML = '<p class="dim">Starting camera\u2026</p>';
     try {
-      scanStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
-      $('#scan-video').srcObject = scanStream;
-      res.innerHTML = '<p class="dim">Point at the card name and tap Capture.</p>';
+      // Try rear camera first, fall back to any available camera
+      try {
+        scanStream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }
+        });
+      } catch (_) {
+        scanStream = await navigator.mediaDevices.getUserMedia({ video: true });
+      }
+      const v = $('#scan-video');
+      v.srcObject = scanStream;
+      await v.play().catch(() => {});
+      res.innerHTML = '<p class="dim">Point at the <strong>card name</strong> and tap Capture.</p>';
     } catch (e) {
-      res.innerHTML = `<p class="error-text">Camera unavailable: ${Render.escapeHtml(e.message)}</p>`;
+      let msg = 'Camera unavailable.';
+      if (e.name === 'NotAllowedError' || e.name === 'PermissionDeniedError') {
+        msg = 'Camera permission denied. Tap the camera/lock icon in your browser address bar and allow camera access, then try again.';
+      } else if (e.name === 'NotFoundError' || e.name === 'DevicesNotFoundError') {
+        msg = 'No camera found on this device.';
+      } else if (e.name === 'NotReadableError' || e.name === 'TrackStartError') {
+        msg = 'Camera is being used by another app. Close it and try again.';
+      }
+      res.innerHTML = `<p class="error-text">${Render.escapeHtml(msg)}</p>
+        <p class="dim small" style="margin-top:.5rem">You can also use the <strong>Upload image</strong> button below.</p>`;
     }
   }
+
   async function captureAndRecognize() {
     const video = $('#scan-video'), canvas = $('#scan-canvas'), res = $('#scan-result');
     if (!video || !canvas || !scanStream) return;
     res.innerHTML = '<p class="dim">Capturing\u2026</p>';
-    canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+    canvas.width  = video.videoWidth  || 1280;
+    canvas.height = video.videoHeight || 720;
     canvas.getContext('2d').drawImage(video, 0, 0);
-    const ch = Math.floor(canvas.height * 0.25);
-    const cc = document.createElement('canvas'); cc.width = canvas.width; cc.height = ch;
-    cc.getContext('2d').drawImage(canvas, 0, 0, canvas.width, ch, 0, 0, canvas.width, ch);
-    res.innerHTML = '<p class="dim">Loading OCR\u2026</p>';
-    try {
-      if (!window.Tesseract) {
-        await new Promise((ok, err) => {
-          const s = document.createElement('script');
-          s.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
-          s.onload = ok; s.onerror = err; document.head.appendChild(s);
-        });
-      }
-      res.innerHTML = '<p class="dim">Recognizing\u2026</p>';
-      const { data: { text } } = await window.Tesseract.recognize(cc, 'eng', {
-        tessedit_char_whitelist: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 ',.\-"
-      });
-      const cleaned = cleanOcrText(text);
-      if (!cleaned || cleaned.length < 2) { res.innerHTML = '<p class="dim">Couldn\u2019t read — try better lighting.</p>'; return; }
-      res.innerHTML = `<p class="dim">Looking up \u201c${Render.escapeHtml(cleaned)}\u201d\u2026</p>`;
-      const ac = await Scryfall.autocomplete(cleaned);
-      const cands = (ac.data || []).slice(0, 3);
-      if (!cands.length) { res.innerHTML = `<p class="error-text">No card found for \u201c${Render.escapeHtml(cleaned)}\u201d.</p>`; return; }
-      res.innerHTML = `<p class="dim">Tap to add:</p>` +
-        cands.map(n => `<div class="scan-match"><span class="scan-name">${Render.escapeHtml(n)}</span><button class="btn btn-sm btn-primary" data-action="scan-add" data-name="${Render.escapeHtml(n)}">Add</button></div>`).join('') +
-        `<p class="scan-status">OCR: \u201c${Render.escapeHtml(cleaned)}\u201d</p>`;
-    } catch (e) { res.innerHTML = `<p class="error-text">OCR error: ${Render.escapeHtml(e.message)}</p>`; }
+    // Crop to the top 28% of the frame where the card name lives
+    const cropH = Math.floor(canvas.height * 0.28);
+    const crop  = document.createElement('canvas');
+    crop.width  = canvas.width; crop.height = cropH;
+    crop.getContext('2d').drawImage(canvas, 0, 0, canvas.width, cropH, 0, 0, canvas.width, cropH);
+    await runOcr(crop);
   }
+
+  async function scanFromUpload(file) {
+    if (!file || !file.type.startsWith('image/')) return;
+    $('#scan-area').classList.remove('hidden');
+    const res = $('#scan-result');
+    res.innerHTML = '<p class="dim">Reading image\u2026</p>';
+    try {
+      const img = await new Promise((ok, err) => {
+        const i = new Image(), url = URL.createObjectURL(file);
+        i.onload = () => { URL.revokeObjectURL(url); ok(i); };
+        i.onerror = err; i.src = url;
+      });
+      const cropH = Math.floor(img.naturalHeight * 0.28);
+      const crop  = document.createElement('canvas');
+      crop.width  = img.naturalWidth; crop.height = cropH;
+      crop.getContext('2d').drawImage(img, 0, 0, img.naturalWidth, cropH, 0, 0, img.naturalWidth, cropH);
+      await runOcr(crop);
+    } catch (e) {
+      res.innerHTML = `<p class="error-text">Could not read image: ${Render.escapeHtml(e.message)}</p>`;
+    }
+  }
+
   async function addScannedCard(name) {
     await fetchAndAddToCollection(name);
+    toast(`Added ${name} to collection.`);
     stopScan();
   }
 
@@ -4115,6 +4202,10 @@ const Render = (() => {
     });
     $('#scan-capture-btn')?.addEventListener('click', captureAndRecognize);
     $('#scan-stop-btn')?.addEventListener('click', stopScan);
+    $('#scan-upload-input')?.addEventListener('change', e => {
+      if (e.target.files[0]) scanFromUpload(e.target.files[0]);
+      e.target.value = ''; // reset so same file can be re-selected
+    });
 
     $('#settings-btn').addEventListener('click', openSettings);
     $('#settings-close').addEventListener('click', closeSettings);
