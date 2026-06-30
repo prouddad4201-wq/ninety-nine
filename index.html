@@ -1191,6 +1191,34 @@ select { cursor: pointer; }
   line-height: 1.65;
 }
 
+/* ── Tribe picker ─────────────────────────────────────────────────── */
+.tribe-picker-row {
+  margin-top: -.4rem;
+  margin-bottom: 1.1rem;
+  padding: 12px 16px;
+  background: linear-gradient(135deg, rgba(245,166,35,.06), rgba(245,166,35,.02));
+  border: 1px solid rgba(245,166,35,.25);
+  border-radius: 10px;
+}
+.tribe-picker-row label {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: .68rem;
+  font-weight: 600;
+  color: var(--amber-hi);
+  margin-bottom: 6px;
+  text-transform: uppercase;
+  letter-spacing: .1em;
+}
+.tribe-picker-row select {
+  background: var(--surface-2);
+  border-color: rgba(245,166,35,.3);
+}
+.tribe-picker-row select:focus {
+  border-color: var(--amber);
+  box-shadow: 0 0 0 3px var(--amber-glow);
+}
+
 </style>
 </head>
 <body>
@@ -1240,6 +1268,10 @@ select { cursor: pointer; }
     <button class="tab-btn" role="tab" id="tab-saved" data-tab="saved" aria-controls="panel-saved" aria-selected="false">
       <svg class="tab-icon" viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 2h10l2 4H3z"/><rect x="2" y="6" width="16" height="12" rx="2"/><path d="M10 10v5M7 13l3 3 3-3"/></svg>
       <span class="tab-label">Saved</span>
+    </button>
+    <button class="tab-btn" role="tab" id="tab-inventory" data-tab="inventory" aria-controls="panel-inventory" aria-selected="false">
+      <svg class="tab-icon" viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="3" width="16" height="4" rx="1"/><rect x="2" y="9" width="16" height="4" rx="1"/><path d="M2 17h16"/><path d="M6 11v2M10 11v2M14 11v2"/></svg>
+      <span class="tab-label">Inventory</span>
     </button>
   </nav>
 
@@ -1344,6 +1376,16 @@ select { cursor: pointer; }
           </div>
 
         </div>
+
+        <!-- Tribe picker — shown only when Tribal archetype is selected -->
+        <div id="tribe-picker-row" class="build-option-field tribe-picker-row hidden">
+          <label for="tribe-select">Creature type to build around</label>
+          <select id="tribe-select">
+            <option value="">Auto-detect from commander</option>
+          </select>
+          <p class="hint" style="margin-top:.4rem">Pick any tribe — your commander doesn't need to be that creature type itself. Auto-detect uses the commander's own type line when left blank.</p>
+        </div>
+
         <div id="build-detail" class="power-level-detail dim"></div>
       </div>
 
@@ -2330,6 +2372,7 @@ function decodeDeckFromShare(hash) {
  * - `/cards/collection` is batched at 75 identifiers/request with a slower
  *   (2/sec) pace, per Scryfall's stricter limit on that endpoint.
  */
+
 const Scryfall = (() => {
   const BASE = 'https://api.scryfall.com';
   const cache = new Map();
@@ -2726,6 +2769,7 @@ const Render = (() => {
  * App wiring. Depends on Scryfall, Store, Render, and the helpers in
  * state.js (all loaded as plain globals before this file).
  */
+
 (function () {
   'use strict';
 
@@ -2746,7 +2790,7 @@ const Render = (() => {
     recommendationsSource: {},
     search: { query: '', results: [], page: 1, hasMore: false, loading: false, error: null },
     sortPrefs: { search: 'edhrec', rec: 'default', deck: 'name' },
-    buildPrefs: { format: 'commander', archetype: 'balanced', powerLevel: 'focused', budget: null, fromCollection: false, allowFill: true },
+    buildPrefs: { format: 'commander', archetype: 'balanced', powerLevel: 'focused', budget: null, fromCollection: false, allowFill: true, tribe: null },
     savedDecks: [], // [{id, name, commanders, deck, buildPrefs, savedAt}]
   };
 
@@ -3028,7 +3072,42 @@ const Render = (() => {
     if (fillRow) fillRow.style.display = state.buildPrefs.fromCollection ? '' : 'none';
     const fillToggle = $('#allow-fill-toggle');
     if (fillToggle) fillToggle.checked = state.buildPrefs.allowFill !== false;
+    populateTribePicker();
     updateBuildDetail();
+  }
+
+  /** Fill the tribe <select> from KNOWN_TRIBES (once) and show/hide based on archetype */
+  let tribeOptionsBuilt = false;
+  function populateTribePicker() {
+    const sel = $('#tribe-select');
+    const row = $('#tribe-picker-row');
+    if (!sel || !row) return;
+
+    if (!tribeOptionsBuilt) {
+      const sorted = [...KNOWN_TRIBES].sort();
+      sorted.forEach(tribe => {
+        const opt = document.createElement('option');
+        opt.value = tribe;
+        opt.textContent = tribe;
+        sel.appendChild(opt);
+      });
+      tribeOptionsBuilt = true;
+    }
+
+    // Show the picker only for Tribal archetype
+    const isTribal = state.buildPrefs.archetype === 'tribal';
+    row.classList.toggle('hidden', !isTribal);
+    if (!isTribal) return;
+
+    // Restore manual selection, or hint at auto-detected tribe via the placeholder
+    sel.value = state.buildPrefs.tribe || '';
+    const detected = commanderCreatureTypes(state.commanders);
+    const autoOpt = sel.querySelector('option[value=""]');
+    if (autoOpt) {
+      autoOpt.textContent = detected.length
+        ? `Auto-detect from commander (${detected.join(', ')})`
+        : 'Auto-detect from commander (none found — pick one below)';
+    }
   }
 
   function updateBuildDetail() {
@@ -3193,19 +3272,37 @@ const Render = (() => {
   }
 
   /**
-   * Extract creature types from a commander's type line for Tribal builds.
+   * Master creature-type list for Tribal builds (manual picker + auto-detect).
+   * Restricted to types with genuine tribal support — real lords, anthems, and
+   * payoff cards exist for each of these. Flavor-only subtypes (Horror, Phyrexian,
+   * Praetor, God, Coward, Lhurgoyf, etc.) are deliberately excluded: picking one of
+   * those as a "tribe" returns almost no cards because Magic has never printed a
+   * meaningful lord/payoff suite for them, so they'd be a dead end in the picker.
+   */
+  const KNOWN_TRIBES = [
+    'Elf','Goblin','Zombie','Vampire','Dragon','Wizard','Warrior','Knight',
+    'Merfolk','Human','Soldier','Angel','Demon','Beast','Dinosaur','Cat',
+    'Bird','Snake','Sliver','Treefolk','Faerie','Dwarf','Giant','Elemental',
+    'Artificer','Cleric','Rogue','Shaman','Druid','Ranger','Warlock','Monk',
+    'Pirate','Ninja','Samurai','Spirit','Skeleton','Rat','Spider',
+    'Wolf','Werewolf','Kor','Kithkin','Squirrel','Construct',
+    'Golem','Ally','Sphinx','Drake','Hydra','Wurm',
+    'Orc','Centaur','Minotaur','Satyr','Naga','Lizard',
+    'Insect','Bat','Fox','Boar','Rhino','Bear','Frog','Phoenix',
+    'Unicorn','Pegasus','Griffin','Djinn','Efreet',
+    'Gnome','Pixie','Imp','Devil','Gremlin','Homunculus',
+    'Scout','Assassin','Berserker','Barbarian','Archer',
+    'Noble','Advisor','Citizen','Mercenary',
+    'Eldrazi','Ooze',
+    'Plant','Saproling','Myr','Servo','Thopter','Scarecrow',
+    'Whale','Shark','Kraken','Leviathan','Serpent',
+  ];
+
+  /**
+   * Extract creature types from a commander's type line for auto-detect.
    * Returns array of type strings e.g. ['Dragon', 'Wizard'].
    */
   function commanderCreatureTypes(commanders) {
-    const KNOWN_TRIBES = [
-      'Elf','Goblin','Zombie','Vampire','Dragon','Wizard','Warrior','Knight',
-      'Merfolk','Human','Soldier','Angel','Demon','Beast','Dinosaur','Cat',
-      'Bird','Snake','Sliver','Treefolk','Faerie','Dwarf','Giant','Elemental',
-      'Artificer','Cleric','Rogue','Shaman','Druid','Ranger','Warlock','Monk',
-      'Pirate','Ninja','Samurai','Spirit','Horror','Skeleton','Rat','Spider',
-      'Wolf','Werewolf','Kor','Kithkin','Moonfolk','Squirrel','Construct',
-      'Golem','Fungus','Thallid','Ally','Sphinx','Drake','Hydra','Wurm',
-    ];
     const types = [];
     commanders.forEach(c => {
       const tl = (c.type_line || '').replace(/.*—\s*/, '');
@@ -3350,22 +3447,38 @@ const Render = (() => {
       // Vary cap ±3 each build so the composition changes meaningfully
       const capJitter = () => Math.floor(Math.random() * 7) - 3; // -3 to +3
 
-      // Tribal: add creature-type-specific queries dynamically
-      const effectiveQueries = [...archetype.queries];
+      // Tribal: replace generic base queries with tribe-specific ones once we know the tribe.
+      // The archetype's own `queries` (otag:lord, otag:tribal, otag:changeling) are tribe-AGNOSTIC —
+      // they pull lords and tribal cards for EVERY creature type, which is exactly how an Elf
+      // pick still ends up with Demons or Goblins in the 99. So for Tribal mode we discard the
+      // generic base queries whenever a specific tribe is known, and build the query list from
+      // scratch around that tribe only. Changelings are kept since they count as every type.
+      let effectiveQueries = [...archetype.queries];
       if (archetype.tribalMode) {
-        const tribes = commanderCreatureTypes(state.commanders);
-        tribes.forEach(tribe => {
-          // Same creature type creatures
-          effectiveQueries.push({ q: `t:${tribe.toLowerCase()} -t:legendary`, cap: 22 });
-          // Lords that buff this type
-          effectiveQueries.push({ q: `o:"${tribe.toLowerCase()}s get +" OR o:"${tribe.toLowerCase()} you control get"`, cap: 8 });
-          // Tribal spells
-          effectiveQueries.push({ q: `t:"tribal" t:"${tribe.toLowerCase()}"`, cap: 6 });
-        });
-        if (!tribes.length) {
-          // Fallback: generic creature synergy
-          effectiveQueries.push({ q: 'otag:lord', cap: 16 });
-          effectiveQueries.push({ q: 't:creature otag:tribal', cap: 20 });
+        const manualTribe = (state.buildPrefs.tribe || '').trim();
+        const tribes = manualTribe ? [manualTribe] : commanderCreatureTypes(state.commanders);
+
+        if (tribes.length) {
+          // We know the tribe(s) — build a tribe-locked query list, dropping the generic ones.
+          effectiveQueries = [];
+          tribes.forEach(tribe => {
+            const t = tribe.toLowerCase();
+            // Creatures of this exact type
+            effectiveQueries.push({ q: `t:${t} -t:legendary`, cap: 22 });
+            // Lords / anthem effects that name THIS type specifically
+            effectiveQueries.push({ q: `(o:"${t}s get +" OR o:"${t}s you control get" OR o:"other ${t}s you control get")`, cap: 8 });
+            // Spells that care about the type by name (tutors, payoffs) but aren't the creature itself
+            effectiveQueries.push({ q: `o:"${t}" -t:${t}`, cap: 6 });
+          });
+          // Changelings count as every creature type — always relevant tribal filler
+          effectiveQueries.push({ q: 'o:changeling', cap: 4 });
+        } else {
+          // No tribe could be determined at all (no manual pick, nothing on the commander) —
+          // fall back to the generic lord/tribal pool so the build doesn't come back empty.
+          effectiveQueries = [
+            { q: 'otag:lord', cap: 16 },
+            { q: 't:creature otag:tribal', cap: 20 },
+          ];
         }
       }
 
@@ -3393,15 +3506,20 @@ const Render = (() => {
       }
 
       // ── 3. Commander synergy cards ────────────────────────────────────────
+      // For Tribal builds, cap synergy bleed lower (5-10 instead of 10-20) so the chosen
+      // tribe stays the dominant visual/thematic identity of the deck instead of getting
+      // diluted by unrelated creature types pulled in via the commander's other abilities.
       const themeTags = commanderThemeTags(state.commanders);
       const synergyCards = [];
+      const isTribalBuild = archetype.tribalMode === true;
       for (const tag of themeTags) {
         try {
           const res = await fetchVariedPool(
             `${tag} ${baseFrag}`, { order: 'edhrec', unique: 'cards' }
           );
-          // Pick 10-20 synergy cards randomly so each build feels different
-          const synCap = 10 + Math.floor(Math.random() * 11);
+          const synCap = isTribalBuild
+            ? 5 + Math.floor(Math.random() * 6)   // 5-10 for Tribal
+            : 10 + Math.floor(Math.random() * 11); // 10-20 for everything else
           synergyCards.push(...dedup(res).slice(0, synCap));
         } catch (_) {}
       }
@@ -4597,7 +4715,12 @@ const Render = (() => {
     const arcSel2 = $('#archetype-select');
     if (arcSel2) arcSel2.addEventListener('change', e => {
       state.buildPrefs.archetype = e.target.value;
-      persistPrefs(); updateBuildDetail();
+      persistPrefs(); updateBuildDetail(); populateTribePicker();
+    });
+    const tribeSel = $('#tribe-select');
+    if (tribeSel) tribeSel.addEventListener('change', e => {
+      state.buildPrefs.tribe = e.target.value || null;
+      persistPrefs();
     });
     const plSel = $('#power-level-select');
     if (plSel) plSel.addEventListener('change', (e) => {
@@ -4742,7 +4865,6 @@ const Render = (() => {
 
   document.addEventListener('DOMContentLoaded', init);
 })();
-
 </script>
 </body>
 </html>
