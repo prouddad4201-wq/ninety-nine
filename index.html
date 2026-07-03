@@ -1219,6 +1219,139 @@ select { cursor: pointer; }
   box-shadow: 0 0 0 3px var(--amber-glow);
 }
 
+/* ── AI Coach tab ─────────────────────────────────────────────────── */
+.coach-header {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  gap: 1rem; flex-wrap: wrap; margin-bottom: 1.5rem;
+}
+.coach-deck-badge {
+  background: linear-gradient(135deg, var(--amber), var(--amber-hi));
+  color: var(--amber-ink); font-weight: 700; font-size: .8rem;
+  padding: 6px 14px; border-radius: 20px;
+  white-space: nowrap; max-width: 280px;
+  overflow: hidden; text-overflow: ellipsis;
+  box-shadow: 0 2px 12px var(--amber-glow);
+}
+
+/* Action grid */
+.coach-actions {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px; margin-bottom: 1.5rem;
+}
+.coach-action-btn {
+  background: linear-gradient(145deg, var(--surface-3), var(--surface-2));
+  border: 1px solid var(--border-hi);
+  border-radius: var(--radius-lg);
+  padding: 18px 16px;
+  text-align: left; cursor: pointer;
+  display: flex; flex-direction: column; gap: 6px;
+  transition: border-color .15s, box-shadow .15s, transform .12s;
+}
+.coach-action-btn:not(:disabled):hover {
+  border-color: var(--amber);
+  box-shadow: 0 4px 24px rgba(0,0,0,.3), 0 0 0 1px var(--amber-glow);
+  transform: translateY(-2px);
+}
+.coach-action-btn:disabled {
+  opacity: .4; cursor: not-allowed;
+}
+.coach-action-icon { font-size: 1.5rem; line-height: 1; }
+.coach-action-label {
+  font-weight: 700; font-size: .92rem; color: var(--text);
+  font-family: var(--font-body);
+}
+.coach-action-desc { font-size: .75rem; color: var(--text-dim); line-height: 1.4; }
+
+/* Response area */
+.coach-response-wrap { display: flex; flex-direction: column; gap: 1rem; }
+.coach-response-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding-bottom: .75rem; border-bottom: 1px solid var(--border);
+}
+.coach-response-title { font-weight: 700; font-size: 1.05rem; }
+.coach-response-body {
+  background: linear-gradient(145deg, var(--surface-3), var(--surface-2));
+  border: 1px solid var(--border-hi);
+  border-radius: var(--radius-lg);
+  padding: 1.5rem;
+  min-height: 120px;
+}
+
+/* Loading spinner */
+.coach-loading {
+  display: flex; align-items: center; gap: .75rem;
+  color: var(--text-dim); font-size: .9rem;
+}
+.coach-spinner {
+  width: 20px; height: 20px; flex-shrink: 0;
+  border: 2px solid var(--border); border-top-color: var(--amber);
+  border-radius: 50%; animation: spin .7s linear infinite;
+}
+
+/* Output formatting */
+.coach-output { color: var(--text); font-size: .9rem; line-height: 1.75; }
+.coach-output p { margin: 0 0 .75rem; }
+.coach-output p:last-child { margin-bottom: 0; }
+.coach-h3 {
+  font-family: var(--font-display); font-size: 1rem; font-weight: 700;
+  color: var(--amber-hi); letter-spacing: .04em;
+  margin: 1.25rem 0 .5rem;
+}
+.coach-hr { border: none; border-top: 1px solid var(--border); margin: 1rem 0; }
+
+/* Chat */
+.coach-chat-wrap {
+  background: var(--surface-2);
+  border: 1px solid var(--border-hi);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+.coach-chat-history {
+  padding: 1rem; max-height: 320px; overflow-y: auto;
+  display: flex; flex-direction: column; gap: 10px;
+}
+.coach-bubble {
+  max-width: 88%; padding: 10px 14px; border-radius: 12px;
+  font-size: .875rem; line-height: 1.65;
+}
+.coach-bubble p { margin: 0 0 .4rem; }
+.coach-bubble p:last-child { margin: 0; }
+.coach-bubble-user {
+  align-self: flex-end;
+  background: linear-gradient(135deg, var(--amber), var(--amber-hi));
+  color: var(--amber-ink); border-radius: 12px 12px 4px 12px;
+}
+.coach-bubble-assistant {
+  align-self: flex-start;
+  background: var(--surface-3); border: 1px solid var(--border);
+  color: var(--text); border-radius: 12px 12px 12px 4px;
+}
+.coach-thinking { opacity: .5; font-style: italic; }
+.coach-chat-input-row {
+  display: flex; gap: .5rem; padding: .75rem;
+  border-top: 1px solid var(--border); background: var(--surface-3);
+}
+.coach-chat-input-row input {
+  flex: 1; background: var(--surface-2);
+  border-radius: 8px; padding: 9px 12px; font-size: .875rem;
+  min-height: unset;
+}
+
+/* Mobile adjustments */
+@media (max-width: 640px) {
+  .coach-actions { grid-template-columns: 1fr 1fr; gap: 8px; }
+  .coach-action-btn { padding: 13px 12px; }
+  .coach-action-icon { font-size: 1.2rem; }
+  .coach-action-label { font-size: .82rem; }
+  .coach-action-desc { font-size: .68rem; }
+  .coach-response-body { padding: 1rem; }
+  .coach-chat-history { max-height: 220px; }
+}
+@media (max-width: 360px) {
+  .coach-actions { grid-template-columns: 1fr; }
+}
+
 </style>
 </head>
 <body>
@@ -1272,6 +1405,10 @@ select { cursor: pointer; }
     <button class="tab-btn" role="tab" id="tab-inventory" data-tab="inventory" aria-controls="panel-inventory" aria-selected="false">
       <svg class="tab-icon" viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="3" width="16" height="4" rx="1"/><rect x="2" y="9" width="16" height="4" rx="1"/><path d="M2 17h16"/><path d="M6 11v2M10 11v2M14 11v2"/></svg>
       <span class="tab-label">Inventory</span>
+    </button>
+    <button class="tab-btn" role="tab" id="tab-coach" data-tab="coach" aria-controls="panel-coach" aria-selected="false">
+      <svg class="tab-icon" viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="10" cy="10" r="8"/><path d="M10 6v4l3 3"/><circle cx="10" cy="3" r="1" fill="currentColor"/></svg>
+      <span class="tab-label">Coach</span>
     </button>
   </nav>
 
@@ -1589,6 +1726,85 @@ select { cursor: pointer; }
       <div id="saved-decks-list" class="saved-decks-list"></div>
       <div id="saved-decks-empty" class="saved-decks-empty hidden">
         <p>No saved decks yet — build a deck on the Commander tab, then come back here to save it.</p>
+      </div>
+    </section>
+
+    <!-- ===================== AI Coach ===================== -->
+    <section id="panel-coach" class="tab-panel hidden" data-panel="coach" role="tabpanel" aria-labelledby="tab-coach">
+      <div class="coach-header">
+        <div>
+          <h2>AI Coach</h2>
+          <p class="panel-intro" id="coach-deck-context-label">Build or load a deck first, then use any tool below.</p>
+        </div>
+        <div class="coach-deck-badge hidden" id="coach-deck-badge"></div>
+      </div>
+
+      <!-- Quick-action grid -->
+      <div class="coach-actions" id="coach-actions">
+        <button class="coach-action-btn" data-coach="analysis" disabled>
+          <span class="coach-action-icon">🔍</span>
+          <span class="coach-action-label">Deck Analysis</span>
+          <span class="coach-action-desc">Curve, color balance, weaknesses, bracket summary</span>
+        </button>
+        <button class="coach-action-btn" data-coach="combos" disabled>
+          <span class="coach-action-icon">⚡</span>
+          <span class="coach-action-label">Combo Discovery</span>
+          <span class="coach-action-desc">Find 2–4 card combos hiding in your 99</span>
+        </button>
+        <button class="coach-action-btn" data-coach="optimize" disabled>
+          <span class="coach-action-icon">🎯</span>
+          <span class="coach-action-label">Optimization</span>
+          <span class="coach-action-desc">Suggested cuts &amp; additions with reasoning</span>
+        </button>
+        <button class="coach-action-btn" data-coach="strategy" disabled>
+          <span class="coach-action-icon">📋</span>
+          <span class="coach-action-label">Strategy Report</span>
+          <span class="coach-action-desc">Early/mid/late game plan &amp; win conditions</span>
+        </button>
+        <button class="coach-action-btn" data-coach="pilot" disabled>
+          <span class="coach-action-icon">🧭</span>
+          <span class="coach-action-label">Pilot Guide</span>
+          <span class="coach-action-desc">Mulligan guide, opening lines, priority order</span>
+        </button>
+        <button class="coach-action-btn" data-coach="trainer" disabled>
+          <span class="coach-action-icon">🎓</span>
+          <span class="coach-action-label">Trainer Mode</span>
+          <span class="coach-action-desc">Scenario-based questions to sharpen your play</span>
+        </button>
+        <button class="coach-action-btn" data-coach="hand" disabled>
+          <span class="coach-action-icon">🃏</span>
+          <span class="coach-action-label">Practice Hand</span>
+          <span class="coach-action-desc">Draw 7, evaluate your line, get feedback</span>
+        </button>
+        <button class="coach-action-btn" data-coach="threats" disabled>
+          <span class="coach-action-icon">⚔️</span>
+          <span class="coach-action-label">Threat Assessment</span>
+          <span class="coach-action-desc">What opponents fear most &amp; how to handle it</span>
+        </button>
+      </div>
+
+      <!-- Response / chat area -->
+      <div class="coach-response-wrap hidden" id="coach-response-wrap">
+        <div class="coach-response-header">
+          <span id="coach-response-title" class="coach-response-title"></span>
+          <button class="btn btn-ghost btn-sm" id="coach-back-btn">← Back to tools</button>
+        </div>
+        <div class="coach-response-body" id="coach-response-body">
+          <div class="coach-loading" id="coach-loading">
+            <div class="coach-spinner"></div>
+            <span id="coach-loading-text">Analyzing your deck…</span>
+          </div>
+          <div id="coach-output" class="coach-output hidden"></div>
+        </div>
+
+        <!-- Follow-up chat -->
+        <div class="coach-chat-wrap" id="coach-chat-wrap">
+          <div id="coach-chat-history" class="coach-chat-history"></div>
+          <div class="coach-chat-input-row">
+            <input type="text" id="coach-chat-input" placeholder="Ask a follow-up question about your deck…" autocomplete="off">
+            <button class="btn btn-primary btn-sm" id="coach-chat-send">Send</button>
+          </div>
+        </div>
       </div>
     </section>
 
@@ -3030,6 +3246,7 @@ const Render = (() => {
     if (tab === 'deck')        renderDeckTab();
     if (tab === 'collection')  renderCollectionTab();
     if (tab === 'saved')       renderSavedDecksTab();
+    if (tab === 'coach')       updateCoachDeckBadge();
   }
 
   /* -------------------------- Commander panel --------------------------- */
@@ -3628,6 +3845,7 @@ const Render = (() => {
       // Enable saved decks button
       const sdBtn = $('#save-current-deck-btn');
       if (sdBtn) sdBtn.disabled = false;
+      updateCoachDeckBadge();
 
       const budgetNote  = totalBudget != null ? ` · $${totalBudget} budget` : '';
       const actualCost  = estimatedDeckPrice(state.deck);
@@ -4776,6 +4994,7 @@ const Render = (() => {
     $('#search-form').addEventListener('submit', (e) => { e.preventDefault(); runSearch($('#search-input').value, false); });
     wireCollectionSearch();
     wireSavedDecksTab();
+    wireCoachTab();
     $('#owned-only-toggle').addEventListener('change', (e) => {
       state.ownedOnly = e.target.checked; persistOwnedOnly();
       state.recommendations = {};
@@ -4863,8 +5082,250 @@ const Render = (() => {
     if (window.location.hash.includes('deck=') && state.deck.length) await persistDeck();
   }
 
+  /* ================================================================
+     AI COACH — powered by Claude claude-sonnet-4-6 via Anthropic API
+     All 8 features share the same deck-context pipeline.
+  ================================================================ */
+
+  // Conversation history for multi-turn chat within a session
+  let coachHistory = [];
+  let coachCurrentMode = null;
+
+  /** Serialize the current deck into a compact string for the AI prompt */
+  function deckContextString() {
+    if (!state.commanders.length && !state.deck.length) return null;
+    const cmdrNames = state.commanders.map(c => c.name).join(' + ');
+    const grouped = {};
+    state.deck.forEach(({ card, count }) => {
+      const type = card.type_line?.split('—')[0]?.trim() || 'Other';
+      const key = type.includes('Creature') ? 'Creatures'
+        : type.includes('Instant') ? 'Instants'
+        : type.includes('Sorcery') ? 'Sorceries'
+        : type.includes('Artifact') ? 'Artifacts'
+        : type.includes('Enchantment') ? 'Enchantments'
+        : type.includes('Land') ? 'Lands'
+        : 'Other';
+      if (!grouped[key]) grouped[key] = [];
+      grouped[key].push(`${count > 1 ? count + 'x ' : ''}${card.name}`);
+    });
+    const sections = Object.entries(grouped).map(([k, v]) => `${k} (${v.length}):\n${v.join(', ')}`).join('\n\n');
+    const ci = (state.commanders[0]?.color_identity || []).join('');
+    const fmt = state.buildPrefs?.format || 'commander';
+    const power = state.buildPrefs?.powerLevel || 'focused';
+    const price = estimatedDeckPrice(state.deck);
+    return `Commander: ${cmdrNames}
+Color Identity: ${ci || 'Colorless'}
+Format: ${fmt} | Power Level: ${power}
+Estimated Value: $${price.toFixed(0)}
+Total Cards: ${state.deck.reduce((s, e) => s + e.count, 0) + state.commanders.length}
+
+${sections}`;
+  }
+
+  const COACH_PROMPTS = {
+    analysis: {
+      title: '🔍 Deck Analysis',
+      loading: 'Analyzing your deck…',
+      system: 'You are an expert Magic: The Gathering Commander deck analyst. Be specific, use card names from the deck, and structure your response clearly with headers.',
+      user: (ctx) => `Analyze this Commander deck in detail:\n\n${ctx}\n\nProvide:\n1. **Mana Curve Assessment** — is the curve appropriate for the strategy?\n2. **Color Balance** — are spells distributed well across colors?\n3. **Category Breakdown** — comment on ramp, draw, removal, threats, synergy counts\n4. **Key Strengths** — what does this deck do especially well?\n5. **Weaknesses & Vulnerabilities** — what can opponents exploit?\n6. **Bracket Assessment** — based on card power and combos, what bracket range?\n\nBe specific. Reference actual cards in the list.`,
+    },
+    combos: {
+      title: '⚡ Combo Discovery',
+      loading: 'Searching for combos in your 99…',
+      system: 'You are a Magic: The Gathering combo expert specializing in Commander. Find real, functional combos only — no theoretical stretches. Every card in a combo must actually be in the provided decklist.',
+      user: (ctx) => `Find all viable combos in this Commander deck:\n\n${ctx}\n\nFor each combo:\n- **Name it** (e.g. "Infinite Mana Loop")\n- **List the exact cards** required (all must be in the decklist above)\n- **Explain the sequence** step by step\n- **State the result** (infinite mana, infinite tokens, instant win, etc.)\n- **Rate difficulty** to assemble (Easy / Medium / Hard)\n\nOnly include combos where ALL pieces are in the current 99. If no combos exist, suggest 2-3 cards that would create combo potential.`,
+    },
+    optimize: {
+      title: '🎯 Optimization',
+      loading: 'Finding cuts and improvements…',
+      system: 'You are a competitive Commander deck optimizer. Give specific, actionable advice. Always explain WHY a card is being cut and WHY the replacement is better.',
+      user: (ctx) => `Optimize this Commander deck:\n\n${ctx}\n\nProvide exactly:\n**10 Suggested Cuts** — cards to remove with brief reason each\n**10 Suggested Additions** — cards to add (budget-conscious, roughly matching current deck value) with brief reason each\n**Priority Order** — rank the swaps from highest to lowest impact\n**Net Effect** — how do these changes improve the deck?\n\nConsider synergy with the commander, mana curve, consistency, and power level.`,
+    },
+    strategy: {
+      title: '📋 Strategy Report',
+      loading: 'Writing your strategy report…',
+      system: 'You are a Commander strategy coach writing a comprehensive game plan document. Be detailed and practical.',
+      user: (ctx) => `Write a complete strategy report for this Commander deck:\n\n${ctx}\n\n## Game Plan\n**Early Game (Turns 1-4):** What to prioritize, what to develop\n**Mid Game (Turns 5-8):** How to advance your strategy, key pieces to find\n**Late Game (Turn 9+):** Win conditions, how to close out the game\n\n## Win Conditions\nList every realistic path to winning and the required pieces\n\n## Key Interactions\nThe 5 most important synergies in the deck\n\n## Threat Assessment\nWhat threats from opponents matter most and how to handle them\n\n## Matchup Notes\nHow does this deck perform against control, aggro, combo, and stax?`,
+    },
+    pilot: {
+      title: '🧭 Pilot Guide',
+      loading: 'Writing your pilot guide…',
+      system: 'You are an experienced Commander pilot writing a practical "how to play this deck" guide for someone who has never played it before.',
+      user: (ctx) => `Write a practical pilot guide for this Commander deck:\n\n${ctx}\n\n## Mulligan Guide\n- What to keep (ideal 7, acceptable 6, snap-keep hands)\n- What to never keep\n- Specific cards you always want in your opener\n\n## Turn-by-Turn Priorities\nWhat to do on turns 1, 2, 3, 4 typically\n\n## Most Important Cards to Protect\nTop 5 cards — why they matter, how to protect them\n\n## Common Mistakes\nWhat new pilots get wrong with this deck\n\n## Sequencing Tips\nOrder of operations for key plays\n\n## When to Go For It\nHow to know when it's time to try to win`,
+    },
+    trainer: {
+      title: '🎓 Trainer Mode',
+      loading: 'Generating your training scenario…',
+      system: 'You are a Commander training coach. Create realistic, challenging game scenarios that test decision-making. After the player responds, give detailed feedback on their answer.',
+      user: (ctx) => `Create a challenging Commander game scenario to test my skills with this deck:\n\n${ctx}\n\nProvide:\n**The Scenario** — it's turn 6, describe the board state in detail (my board, opponents' boards, what's in my hand, my mana available). Use actual cards from my deck.\n\n**The Question** — what is the best line of play and why? Give me 3 numbered options to choose from.\n\n**Context** — it's a 4-player game. Identify the threat player and the player I should be working with.\n\nAfter I answer, you'll analyze my choice and explain the optimal line.`,
+    },
+    hand: {
+      title: '🃏 Practice Hand',
+      loading: 'Drawing your opening hand…',
+      system: 'You are a Commander coach simulating opening hands and evaluating them. Be realistic about what constitutes a keepable hand.',
+      user: (ctx) => `Simulate drawing an opening hand for this Commander deck:\n\n${ctx}\n\nDraw 7 random cards from the deck (pick them realistically — not all the best cards). Show me the hand.\n\nThen ask me: "Would you keep or mulligan this hand? If keeping, what's your game plan for the first 4 turns? If mulliganing, what are you looking for?"\n\nWait for my answer before evaluating.`,
+    },
+    threats: {
+      title: '⚔️ Threat Assessment',
+      loading: 'Assessing threats and answers…',
+      system: 'You are a Commander threat analysis expert. Be brutally honest about what opponents fear and what the deck cannot handle.',
+      user: (ctx) => `Perform a threat assessment for this Commander deck:\n\n${ctx}\n\n## What Opponents Fear\nTop 5 things in this deck that opponents will prioritize dealing with\n\n## What This Deck Fears\nTop 5 card types, strategies, or specific cards that shut this deck down\n\n## Answer Suite Audit\nReview the removal package — what can it handle? What slips through?\n\n## Table Politics\nAt a 4-player table, when is this deck the archenemy? When can it fly under the radar?\n\n## Sideboard Considerations\n(For best-of-3 or leagues) What would you add if you could bring a 10-card sideboard?`,
+    },
+  };
+
+  async function callCoachAI(messages) {
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 2000,
+        system: messages.system,
+        messages: messages.history,
+      }),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error?.message || `API error ${response.status}`);
+    }
+    const data = await response.json();
+    return data.content?.[0]?.text || '';
+  }
+
+  function coachMarkdown(text) {
+    // Very simple markdown → HTML for the response area
+    return text
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+      .replace(/\*(.+?)\*/g, '<em>$1</em>')
+      .replace(/^#{1,3}\s+(.+)$/gm, '<h3 class="coach-h3">$1</h3>')
+      .replace(/^---+$/gm, '<hr class="coach-hr">')
+      .replace(/\n\n/g, '</p><p>')
+      .replace(/\n/g, '<br>')
+      .replace(/^/, '<p>').replace(/$/, '</p>');
+  }
+
+  function showCoachResponse(title) {
+    $('#coach-actions').classList.add('hidden');
+    const wrap = $('#coach-response-wrap');
+    wrap.classList.remove('hidden');
+    if ($('#coach-response-title')) $('#coach-response-title').textContent = title;
+    if ($('#coach-loading')) $('#coach-loading').classList.remove('hidden');
+    if ($('#coach-output')) $('#coach-output').classList.add('hidden');
+    if ($('#coach-chat-wrap')) $('#coach-chat-wrap').classList.add('hidden');
+    if ($('#coach-chat-history')) $('#coach-chat-history').innerHTML = '';
+  }
+
+  function showCoachOutput(html) {
+    const loading = $('#coach-loading'); if (loading) loading.classList.add('hidden');
+    const output = $('#coach-output');
+    if (output) { output.innerHTML = html; output.classList.remove('hidden'); }
+    const chatWrap = $('#coach-chat-wrap'); if (chatWrap) chatWrap.classList.remove('hidden');
+    const chatInput = $('#coach-chat-input'); if (chatInput) chatInput.focus();
+  }
+
+  function appendChatBubble(role, text) {
+    const history = $('#coach-chat-history');
+    if (!history) return;
+    const div = document.createElement('div');
+    div.className = 'coach-bubble coach-bubble-' + role;
+    div.innerHTML = coachMarkdown(text);
+    history.appendChild(div);
+    history.scrollTop = history.scrollHeight;
+  }
+
+  async function runCoachAction(mode) {
+    const ctx = deckContextString();
+    if (!ctx) { toast('Build or load a deck first.', true); return; }
+    const config = COACH_PROMPTS[mode];
+    if (!config) return;
+    coachCurrentMode = mode;
+    coachHistory = [];
+    showCoachResponse(config.title);
+    if ($('#coach-loading-text')) $('#coach-loading-text').textContent = config.loading;
+    try {
+      const userMsg = config.user(ctx);
+      coachHistory.push({ role: 'user', content: userMsg });
+      const reply = await callCoachAI({ system: config.system, history: coachHistory });
+      coachHistory.push({ role: 'assistant', content: reply });
+      showCoachOutput(coachMarkdown(reply));
+    } catch (e) {
+      showCoachOutput(`<p class="error-text">Coach unavailable: ${Render.escapeHtml(e.message)}</p>`);
+    }
+  }
+
+  async function sendCoachChat() {
+    const input = $('#coach-chat-input');
+    const msg = input?.value?.trim();
+    if (!msg || !coachHistory.length) return;
+    input.value = '';
+    input.disabled = true;
+    const sendBtn = $('#coach-chat-send');
+    if (sendBtn) sendBtn.disabled = true;
+    appendChatBubble('user', msg);
+    const thinkDiv = document.createElement('div');
+    thinkDiv.className = 'coach-bubble coach-bubble-assistant coach-thinking';
+    thinkDiv.textContent = '…';
+    $('#coach-chat-history').appendChild(thinkDiv);
+    try {
+      coachHistory.push({ role: 'user', content: msg });
+      const config = COACH_PROMPTS[coachCurrentMode] || { system: 'You are a Commander expert.' };
+      const reply = await callCoachAI({ system: config.system, history: coachHistory });
+      coachHistory.push({ role: 'assistant', content: reply });
+      thinkDiv.remove();
+      appendChatBubble('assistant', reply);
+    } catch (e) {
+      thinkDiv.remove();
+      appendChatBubble('assistant', '⚠️ Error: ' + e.message);
+    } finally {
+      if (input) input.disabled = false;
+      if (sendBtn) sendBtn.disabled = false;
+      if (input) input.focus();
+    }
+  }
+
+  function updateCoachDeckBadge() {
+    const badge = $('#coach-deck-badge');
+    const label = $('#coach-deck-context-label');
+    const btns = document.querySelectorAll('.coach-action-btn');
+    const hasDecky = state.commanders.length > 0 && state.deck.length > 0;
+    btns.forEach(b => b.disabled = !hasDecky);
+    if (!badge || !label) return;
+    if (hasDecky) {
+      badge.classList.remove('hidden');
+      badge.textContent = state.commanders.map(c => c.name).join(' + ');
+      label.textContent = 'Deck loaded. Choose a tool or ask a question.';
+    } else {
+      badge.classList.add('hidden');
+      label.textContent = 'Build or load a deck first, then use any tool below.';
+    }
+  }
+
+  function wireCoachTab() {
+    // Action button clicks
+    document.querySelectorAll('.coach-action-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const mode = btn.dataset.coach;
+        if (mode) runCoachAction(mode);
+      });
+    });
+    // Back button
+    $('#coach-back-btn')?.addEventListener('click', () => {
+      $('#coach-response-wrap').classList.add('hidden');
+      $('#coach-actions').classList.remove('hidden');
+      coachHistory = [];
+      coachCurrentMode = null;
+    });
+    // Chat send
+    $('#coach-chat-send')?.addEventListener('click', sendCoachChat);
+    $('#coach-chat-input')?.addEventListener('keydown', e => {
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendCoachChat(); }
+    });
+  }
+
   document.addEventListener('DOMContentLoaded', init);
 })();
+
 </script>
 </body>
 </html>
