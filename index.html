@@ -1352,6 +1352,130 @@ select { cursor: pointer; }
   .coach-actions { grid-template-columns: 1fr; }
 }
 
+/* ── Header account button ──────────────────────────────────────── */
+.header-actions { display:flex; align-items:center; gap:8px; }
+.header-account-btn {
+  display: flex; align-items: center; gap: 6px;
+  border-radius: 20px !important;
+  padding: 0 14px !important;
+  width: auto !important;
+  font-size: .78rem; font-weight: 600;
+  color: var(--text-dim); letter-spacing: .02em;
+  min-width: 0;
+}
+.header-account-btn:hover { color: var(--amber-hi); border-color: var(--amber) !important; }
+.header-account-btn.account-signed-in { color: var(--success); border-color: rgba(26,224,128,.3) !important; }
+.account-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 120px; }
+@media (max-width: 640px) { .account-label { display: none; } .header-account-btn { width: 40px !important; padding: 0 !important; border-radius: 50% !important; } }
+
+/* ── Auth modal ─────────────────────────────────────────────────── */
+.auth-tabs { display:flex; gap:2px; background:var(--surface-3); border-radius:8px; padding:3px; margin-bottom:1.25rem; }
+.auth-tab { flex:1; background:transparent; border:none; color:var(--text-dim); font-size:.85rem; font-weight:600; padding:8px; border-radius:6px; cursor:pointer; transition:background .15s,color .15s; }
+.auth-tab.active { background:var(--surface-4); color:var(--text); }
+.auth-error { background:rgba(240,48,48,.10); border:1px solid rgba(240,48,48,.3); color:#F87171; border-radius:8px; padding:10px 14px; font-size:.85rem; margin-bottom:1rem; }
+.auth-info  { background:rgba(26,224,128,.10); border:1px solid rgba(26,224,128,.3); color:var(--success); border-radius:8px; padding:10px 14px; font-size:.85rem; margin-bottom:1rem; }
+.auth-divider { display:flex; align-items:center; gap:.75rem; margin:1rem 0; color:var(--text-faint); font-size:.8rem; }
+.auth-divider::before,.auth-divider::after { content:''; flex:1; height:1px; background:var(--border); }
+.auth-footer-note { text-align:center; font-size:.78rem; margin-top:.75rem; color:var(--text-faint); }
+.auth-footer-note a { color:var(--text-dim); }
+
+/* ── Buy dropdown waterfall ─────────────────────────────────────── */
+.buy-dropdown {
+  position: fixed; z-index: 300;
+  background: linear-gradient(160deg, var(--surface-3), var(--surface-2));
+  border: 1px solid var(--border-hi);
+  border-radius: var(--radius-lg);
+  padding: 6px;
+  min-width: 250px; max-width: 300px;
+  box-shadow: 0 20px 60px rgba(0,0,0,.75), 0 0 0 1px rgba(255,255,255,.05);
+  animation: dropdown-in .12s ease;
+}
+@keyframes dropdown-in { from { opacity:0; transform:translateY(-6px); } to { opacity:1; transform:none; } }
+.buy-dropdown-title {
+  font-family: var(--font-mono); font-size:.66rem; font-weight:600;
+  text-transform: uppercase; letter-spacing:.1em;
+  color: var(--text-faint); padding: 4px 10px 8px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.buy-option {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px; border-radius: 8px;
+  text-decoration: none; color: var(--text);
+  transition: background .12s;
+  cursor: pointer;
+}
+.buy-option:hover { background: var(--glass-hi); }
+.buy-option-name { font-weight: 600; font-size: .88rem; display: block; color: var(--text); }
+.buy-option-sub  { font-size: .72rem; color: var(--text-dim); display: block; margin-top:1px; }
+.buy-option-arrow { margin-left: auto; color: var(--text-faint); font-size: .8rem; flex-shrink: 0; }
+
+/* Store option — amber highlight */
+.buy-option-store { background: linear-gradient(135deg, rgba(245,166,35,.12), rgba(245,166,35,.05)); border: 1px solid rgba(245,166,35,.25); }
+.buy-option-store .buy-option-name { color: var(--amber-hi); }
+.buy-option-store:hover { background: rgba(245,166,35,.18); border-color: var(--amber); }
+.buy-option-store::before { content: '🟢'; font-size: .9rem; flex-shrink:0; }
+
+/* TCGPlayer */
+.buy-option-tcg::before  { content: '🎴'; font-size: .9rem; flex-shrink:0; }
+/* Card Kingdom */
+.buy-option-ck::before   { content: '♛'; font-size: .9rem; flex-shrink:0; color: var(--text-dim); }
+/* Arena */
+.buy-option-arena::before{ content: '🎮'; font-size: .9rem; flex-shrink:0; }
+
+/* ── Inventory tab ───────────────────────────────────────────────── */
+.inv-header { display:flex; align-items:flex-start; justify-content:space-between; gap:1rem; flex-wrap:wrap; margin-bottom:1.25rem; }
+.inv-add-form {
+  background: linear-gradient(145deg,var(--surface-3),var(--surface-2));
+  border: 1px solid var(--border-hi); border-radius: var(--radius-lg);
+  padding: 1rem 1.25rem; margin-bottom: 1rem;
+}
+.inv-form-grid { display:flex; flex-wrap:wrap; gap:.75rem; align-items:flex-end; }
+.inv-form-field { display:flex; flex-direction:column; gap:5px; }
+.inv-form-field label { font-family:var(--font-mono); font-size:.66rem; font-weight:700; text-transform:uppercase; letter-spacing:.1em; color:var(--text-dim); }
+.inv-stats {
+  display: flex; flex-wrap: wrap; gap: .75rem;
+  padding: .75rem 1rem;
+  background: linear-gradient(135deg,var(--surface-3),var(--surface-2));
+  border: 1px solid var(--border-hi); border-radius: var(--radius-lg);
+  margin-bottom: 1rem;
+}
+.inv-stat { display:flex; flex-direction:column; gap:2px; }
+.inv-stat-label { font-family:var(--font-mono); font-size:.63rem; text-transform:uppercase; letter-spacing:.1em; color:var(--text-faint); }
+.inv-stat-value { font-family:var(--font-display); font-size:1.35rem; font-weight:700; color:var(--amber-hi); text-shadow:0 0 16px var(--amber-glow); }
+.inv-stat-money { color:var(--success); text-shadow:0 0 12px rgba(26,224,128,.35); }
+.inv-filter-row { display:flex; gap:.6rem; margin-bottom:.75rem; flex-wrap:wrap; }
+.inv-filter-row input { flex:1; min-width:180px; padding:9px 12px; font-size:.875rem; }
+.inv-filter-row select { padding:9px 10px; font-size:.875rem; background:var(--surface-3); border:1px solid var(--border-hi); border-radius:8px; cursor:pointer; color:var(--text); min-height:44px; }
+.inv-list { display:flex; flex-direction:column; gap:8px; }
+.inv-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 14px;
+  background: linear-gradient(145deg,var(--surface-3),var(--surface-2));
+  border: 1px solid var(--border); border-radius: 10px;
+  transition: border-color .15s;
+}
+.inv-row:hover { border-color: var(--border-hi); }
+.inv-card-img { width:44px; height:60px; border-radius:5px; object-fit:cover; flex-shrink:0; background:var(--surface-4); }
+.inv-no-img   { width:44px; height:60px; border-radius:5px; background:var(--surface-4); flex-shrink:0; border:1px solid var(--border); }
+.inv-row-body { flex:1; min-width:0; }
+.inv-row-name { font-weight:700; font-size:.9rem; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.inv-row-meta { display:flex; align-items:center; gap:8px; margin-top:4px; flex-wrap:wrap; }
+.inv-foil-badge { font-size:.68rem; background:rgba(200,180,255,.15); border:1px solid rgba(200,180,255,.3); border-radius:4px; padding:1px 6px; color:#C8B4FF; }
+.inv-cond-badge { font-family:var(--font-mono); font-size:.66rem; font-weight:700; padding:2px 7px; border-radius:4px; }
+.inv-cond-NM  { background:rgba(26,224,128,.12); color:var(--success); }
+.inv-cond-LP  { background:rgba(59,130,246,.12); color:var(--blue-hi); }
+.inv-cond-MP  { background:rgba(245,166,35,.12); color:var(--amber-hi); }
+.inv-cond-HP  { background:rgba(240,120,48,.12); color:var(--mythic); }
+.inv-cond-DMG { background:rgba(240,48,48,.12);  color:var(--danger); }
+.inv-qty   { font-family:var(--font-mono); font-size:.8rem; color:var(--text-dim); }
+.inv-price { font-family:var(--font-mono); font-size:.82rem; font-weight:700; color:var(--success); }
+.inv-row-actions { display:flex; gap:.35rem; flex-shrink:0; }
+.inv-empty { text-align:center; padding:3rem 1rem; color:var(--text-dim); font-size:.92rem; }
+@media (max-width:640px) {
+  .inv-form-grid { flex-direction:column; }
+  .buy-dropdown { min-width:220px; max-width:calc(100vw - 32px); }
+}
+
 </style>
 </head>
 <body>
@@ -1372,9 +1496,16 @@ select { cursor: pointer; }
         <span class="brand-tagline">A Commander deck builder powered by Scryfall</span>
       </div>
     </div>
-    <button id="settings-btn" type="button" class="btn btn-ghost btn-icon" aria-label="Buy-link and affiliate settings" title="Buy-link settings">
+    <div class="header-actions">
+      <!-- Account button -->
+      <button id="account-btn" type="button" class="btn btn-ghost btn-icon header-account-btn" aria-label="Sign in to sync your decks" title="Account">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+        <span class="account-label" id="account-label">Sign in</span>
+      </button>
+      <button id="settings-btn" type="button" class="btn btn-ghost btn-icon" aria-label="Buy-link and affiliate settings" title="Buy-link settings">
       <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
-    </button>
+      </button>
+    </div>
   </header>
 
   <nav class="tab-bar" role="tablist" aria-label="Deck builder sections">
@@ -1729,6 +1860,80 @@ select { cursor: pointer; }
       </div>
     </section>
 
+    <!-- ===================== Inventory (Seller) ===================== -->
+    <section id="panel-inventory" class="tab-panel hidden" data-panel="inventory" role="tabpanel" aria-labelledby="tab-inventory">
+      <div class="inv-header">
+        <div>
+          <h2>Seller Inventory</h2>
+          <p class="panel-intro">Cards MD Collectiblez has in stock. Logged-in users see these first on every card&#8217;s buy options. Only the store account can edit this list.</p>
+        </div>
+        <div id="inv-owner-controls" class="hidden">
+          <button id="inv-add-btn" type="button" class="btn btn-primary">+ Add card</button>
+          <button id="inv-export-btn" type="button" class="btn btn-secondary">Export CSV</button>
+        </div>
+      </div>
+
+      <!-- Add card form (owner only) -->
+      <div id="inv-add-form" class="inv-add-form hidden">
+        <div class="inv-form-grid">
+          <div class="inv-form-field">
+            <label>Card name</label>
+            <div class="coll-search-wrap" style="max-width:320px">
+              <input type="text" id="inv-card-search" placeholder="Search card name…" autocomplete="off" spellcheck="false">
+              <ul id="inv-card-suggestions" class="suggestions-list"></ul>
+            </div>
+          </div>
+          <div class="inv-form-field">
+            <label>Qty</label>
+            <input type="number" id="inv-qty" value="1" min="1" max="999" style="width:80px">
+          </div>
+          <div class="inv-form-field">
+            <label>Your price ($)</label>
+            <input type="number" id="inv-price" placeholder="e.g. 4.99" min="0" step="0.01" style="width:120px">
+          </div>
+          <div class="inv-form-field">
+            <label>Condition</label>
+            <select id="inv-condition">
+              <option value="NM">NM</option>
+              <option value="LP">LP</option>
+              <option value="MP">MP</option>
+              <option value="HP">HP</option>
+              <option value="DMG">DMG</option>
+            </select>
+          </div>
+          <div class="inv-form-field">
+            <label>Foil?</label>
+            <input type="checkbox" id="inv-foil" style="width:auto;margin-top:10px">
+          </div>
+        </div>
+        <div style="display:flex;gap:.5rem;margin-top:.75rem">
+          <button id="inv-save-btn" type="button" class="btn btn-primary">Save</button>
+          <button id="inv-cancel-btn" type="button" class="btn btn-ghost">Cancel</button>
+        </div>
+      </div>
+
+      <!-- Stats bar -->
+      <div id="inv-stats" class="inv-stats hidden"></div>
+
+      <!-- Filter row -->
+      <div class="inv-filter-row">
+        <input type="text" id="inv-filter" placeholder="Filter by name…" autocomplete="off">
+        <select id="inv-sort">
+          <option value="name">Name A–Z</option>
+          <option value="price-hi">Price: high to low</option>
+          <option value="price-lo">Price: low to high</option>
+          <option value="qty">Quantity</option>
+          <option value="recent">Recently added</option>
+        </select>
+      </div>
+
+      <!-- Inventory list -->
+      <div id="inv-list" class="inv-list"></div>
+      <div id="inv-empty" class="inv-empty hidden">
+        <p>No inventory yet. Add cards using the button above.</p>
+      </div>
+    </section>
+
     <!-- ===================== AI Coach ===================== -->
     <section id="panel-coach" class="tab-panel hidden" data-panel="coach" role="tabpanel" aria-labelledby="tab-coach">
       <div class="coach-header">
@@ -1896,6 +2101,48 @@ select { cursor: pointer; }
     </div>
   </div>
 
+  <!-- ===================== Auth modal ===================== -->
+  <div id="auth-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="auth-title">
+    <div class="modal-content" style="max-width:420px">
+      <button id="auth-close" type="button" class="modal-close" aria-label="Close">&times;</button>
+      <h2 id="auth-title">Sign in to Ninety-Nine</h2>
+      <p class="modal-help">Your decks, collection, and saved builds sync across all your devices.</p>
+
+      <div id="auth-tabs" class="auth-tabs">
+        <button class="auth-tab active" data-auth-tab="signin">Sign in</button>
+        <button class="auth-tab" data-auth-tab="signup">Create account</button>
+      </div>
+
+      <div id="auth-error" class="auth-error hidden"></div>
+
+      <div class="modal-field">
+        <label for="auth-email">Email</label>
+        <input type="email" id="auth-email" placeholder="you@example.com" autocomplete="email">
+      </div>
+      <div class="modal-field">
+        <label for="auth-password">Password</label>
+        <input type="password" id="auth-password" placeholder="••••••••" autocomplete="current-password">
+      </div>
+      <div class="modal-field hidden" id="auth-confirm-wrap">
+        <label for="auth-confirm">Confirm password</label>
+        <input type="password" id="auth-confirm" placeholder="••••••••" autocomplete="new-password">
+      </div>
+
+      <button id="auth-submit" type="button" class="btn btn-primary" style="width:100%;margin-top:.25rem">Sign in</button>
+
+      <div class="auth-divider"><span>or</span></div>
+
+      <button id="auth-google" type="button" class="btn btn-secondary" style="width:100%;gap:10px">
+        <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.716v2.259h2.908c1.702-1.567 2.684-3.875 2.684-6.615z" fill="#4285F4"/><path d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332C2.438 15.983 5.482 18 9 18z" fill="#34A853"/><path d="M3.964 10.71c-.18-.54-.282-1.117-.282-1.71s.102-1.17.282-1.71V4.958H.957C.347 6.173 0 7.548 0 9s.348 2.827.957 4.042l3.007-2.332z" fill="#FBBC05"/><path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0 5.482 0 2.438 2.017.957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58z" fill="#EA4335"/></svg>
+        Continue with Google
+      </button>
+
+      <p class="auth-footer-note" id="auth-reset-link">
+        <a href="#" id="auth-forgot">Forgot password?</a>
+      </p>
+    </div>
+  </div>
+
   <!-- ===================== Printings modal ===================== -->
   <div id="printings-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="printings-title">
     <div class="modal-content modal-content-lg">
@@ -1905,7 +2152,411 @@ select { cursor: pointer; }
     </div>
   </div>
 
-  <script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script>
+/**
+ * auth.js — Supabase auth + per-user cloud sync + seller inventory
+ *
+ * ──────────────────────────────────────────────────────────────────
+ * SETUP (one-time, takes 5 minutes):
+ *
+ * 1. Go to https://supabase.com → New project
+ * 2. Settings → API → copy Project URL + anon key → paste below
+ * 3. SQL Editor → run this:
+ *
+ *    CREATE TABLE user_data (
+ *      id         BIGSERIAL PRIMARY KEY,
+ *      user_id    UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+ *      key        TEXT NOT NULL,
+ *      value      TEXT,
+ *      updated_at TIMESTAMPTZ DEFAULT NOW(),
+ *      UNIQUE(user_id, key)
+ *    );
+ *    ALTER TABLE user_data ENABLE ROW LEVEL SECURITY;
+ *    CREATE POLICY "Users own their data" ON user_data
+ *      FOR ALL USING (auth.uid() = user_id);
+ *
+ *    CREATE TABLE inventory (
+ *      id         BIGSERIAL PRIMARY KEY,
+ *      owner_id   UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+ *      card_name  TEXT NOT NULL,
+ *      card_id    TEXT,
+ *      qty        INTEGER DEFAULT 1,
+ *      price      NUMERIC(10,2),
+ *      condition  TEXT DEFAULT 'NM',
+ *      foil       BOOLEAN DEFAULT FALSE,
+ *      image_uri  TEXT,
+ *      added_at   TIMESTAMPTZ DEFAULT NOW()
+ *    );
+ *    ALTER TABLE inventory ENABLE ROW LEVEL SECURITY;
+ *    -- Everyone can read inventory (so buy buttons show stock)
+ *    CREATE POLICY "Anyone can read inventory" ON inventory FOR SELECT USING (true);
+ *    -- Only owner can write
+ *    CREATE POLICY "Owner manages inventory" ON inventory
+ *      FOR ALL USING (auth.uid() = owner_id);
+ *
+ * 4. Authentication → Settings → enable Email and (optionally) Google OAuth
+ * 5. For Google: Authentication → Providers → Google → add your Google OAuth credentials
+ *
+ * ──────────────────────────────────────────────────────────────────
+ * SELLER ACCOUNT:
+ * After setup, create your own account in the app with YOUR email.
+ * Then set SELLER_EMAIL below to that email — inventory controls only
+ * appear for that account, and all users see your inventory on buy buttons.
+ */
+
+const SUPABASE_URL      = 'YOUR_SUPABASE_URL';       // https://xxxx.supabase.co
+const SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY';  // eyJ...
+const SELLER_EMAIL      = 'jc@mdcollectiblez.com';   // Only this account can edit inventory
+
+// ── Supabase client ────────────────────────────────────────────────
+let _sb = null;
+function sb() {
+  if (_sb) return _sb;
+  if (window.supabase) {
+    _sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    return _sb;
+  }
+  return null;
+}
+function configured() {
+  return SUPABASE_URL !== 'YOUR_SUPABASE_URL' && SUPABASE_ANON_KEY !== 'YOUR_SUPABASE_ANON_KEY';
+}
+
+// ── Auth state ─────────────────────────────────────────────────────
+let currentUser = null;
+let authListeners = [];
+
+function onAuthChange(fn) { authListeners.push(fn); }
+function emitAuth(user) {
+  currentUser = user;
+  authListeners.forEach(fn => fn(user));
+}
+function isOwner() {
+  return currentUser && currentUser.email === SELLER_EMAIL;
+}
+function isLoggedIn() { return !!currentUser; }
+
+async function initAuth() {
+  if (!configured()) { emitAuth(null); return; }
+  const client = sb();
+  if (!client) { emitAuth(null); return; }
+  try {
+    const { data: { session } } = await client.auth.getSession();
+    emitAuth(session?.user || null);
+    client.auth.onAuthStateChange((_ev, session) => {
+      emitAuth(session?.user || null);
+    });
+  } catch (e) {
+    console.warn('Auth init failed:', e.message);
+    emitAuth(null);
+  }
+}
+
+async function signInEmail(email, password) {
+  const { data, error } = await sb().auth.signInWithPassword({ email, password });
+  if (error) throw new Error(error.message);
+  return data;
+}
+async function signUpEmail(email, password) {
+  const { data, error } = await sb().auth.signUp({ email, password });
+  if (error) throw new Error(error.message);
+  return data;
+}
+async function signInGoogle() {
+  const { error } = await sb().auth.signInWithOAuth({
+    provider: 'google',
+    options: { redirectTo: window.location.href },
+  });
+  if (error) throw new Error(error.message);
+}
+async function signOut() {
+  await sb().auth.signOut();
+}
+async function resetPassword(email) {
+  const { error } = await sb().auth.resetPasswordForEmail(email, { redirectTo: window.location.href });
+  if (error) throw new Error(error.message);
+}
+
+// ── Cloud data store — same API as localStorage Store ─────────────
+const CloudStore = {
+  async get(key, fallback = null) {
+    if (!currentUser) return fallback;
+    try {
+      const { data } = await sb().from('user_data')
+        .select('value').eq('user_id', currentUser.id).eq('key', key).maybeSingle();
+      return data ? JSON.parse(data.value) : fallback;
+    } catch { return fallback; }
+  },
+  async set(key, value) {
+    if (!currentUser) return;
+    try {
+      await sb().from('user_data').upsert(
+        { user_id: currentUser.id, key, value: JSON.stringify(value), updated_at: new Date().toISOString() },
+        { onConflict: 'user_id,key' }
+      );
+    } catch (e) { console.warn('CloudStore.set failed:', e.message); }
+  },
+  async pullAll() {
+    if (!currentUser) return;
+    try {
+      const { data } = await sb().from('user_data').select('key, value').eq('user_id', currentUser.id);
+      if (!data) return;
+      data.forEach(({ key, value }) => {
+        try { localStorage.setItem(key, value); } catch {}
+      });
+    } catch {}
+  },
+  async pushAll() {
+    if (!currentUser) return;
+    const keys = Object.keys(localStorage).filter(k => k.startsWith('mtgdb:'));
+    for (const key of keys) {
+      try {
+        const value = localStorage.getItem(key);
+        if (value) await this.set(key, JSON.parse(value));
+      } catch {}
+    }
+  },
+};
+
+// ── Inventory (seller) ─────────────────────────────────────────────
+let inventoryCache = []; // full inventory, refreshed on tab open
+
+async function fetchInventory() {
+  if (!configured()) return [];
+  try {
+    const { data, error } = await sb().from('inventory')
+      .select('*').order('added_at', { ascending: false });
+    if (error) throw error;
+    inventoryCache = data || [];
+    return inventoryCache;
+  } catch (e) {
+    console.warn('fetchInventory failed:', e.message);
+    return [];
+  }
+}
+
+/** Check if a card name is in the seller's inventory. Returns item or null. */
+function inventoryHas(cardName) {
+  if (!cardName) return null;
+  const n = cardName.toLowerCase();
+  return inventoryCache.find(item => item.card_name.toLowerCase() === n) || null;
+}
+
+async function addInventoryItem(item) {
+  if (!isOwner()) return;
+  const { data, error } = await sb().from('inventory').insert([{
+    owner_id:  currentUser.id,
+    card_name: item.card_name,
+    card_id:   item.card_id || null,
+    qty:       item.qty || 1,
+    price:     item.price || null,
+    condition: item.condition || 'NM',
+    foil:      item.foil || false,
+    image_uri: item.image_uri || null,
+  }]).select().single();
+  if (error) throw new Error(error.message);
+  inventoryCache.unshift(data);
+  return data;
+}
+
+async function updateInventoryItem(id, updates) {
+  if (!isOwner()) return;
+  const { error } = await sb().from('inventory').update(updates).eq('id', id);
+  if (error) throw new Error(error.message);
+  const idx = inventoryCache.findIndex(i => i.id === id);
+  if (idx >= 0) Object.assign(inventoryCache[idx], updates);
+}
+
+async function deleteInventoryItem(id) {
+  if (!isOwner()) return;
+  const { error } = await sb().from('inventory').delete().eq('id', id);
+  if (error) throw new Error(error.message);
+  inventoryCache = inventoryCache.filter(i => i.id !== id);
+}
+
+// ── Buy link waterfall ─────────────────────────────────────────────
+const CK_BASE    = 'https://www.cardkingdom.com/catalog/search?search=1&filter[name]={QUERY}';
+const TCG_BASE   = 'https://www.tcgplayer.com/search/magic/product?productLineName=magic&q={QUERY}';
+const ARENA_BASE = 'https://www.mtgarena.com'; // fallback — Arena doesn't have deep card links
+
+function ckLink(name) {
+  return CK_BASE.replace('{QUERY}', encodeURIComponent(name));
+}
+
+/**
+ * Build the full buy-options HTML for a card.
+ * Returns an array of {label, url, variant, priority} objects.
+ */
+function buyOptions(cardName, arenaLegal = false) {
+  const options = [];
+  const inv = inventoryHas(cardName);
+
+  // 1. MD Collectiblez inventory — highest priority
+  if (inv && inv.qty > 0) {
+    const priceStr = inv.price ? ` — $${parseFloat(inv.price).toFixed(2)}` : '';
+    const condStr  = inv.condition && inv.condition !== 'NM' ? ` (${inv.condition})` : '';
+    const foilStr  = inv.foil ? ' ✨' : '';
+    options.push({
+      label:    `MD Collectiblez${priceStr}${condStr}${foilStr}`,
+      sublabel: `${inv.qty} in stock`,
+      url:      `mailto:jc@mdcollectiblez.com?subject=Buy inquiry: ${encodeURIComponent(cardName)}&body=Hi, I'm interested in purchasing ${encodeURIComponent(cardName)} from your inventory.`,
+      variant:  'buy-option-store',
+      priority: 1,
+    });
+  }
+
+  // 2. TCGPlayer (with affiliate wrapper if set)
+  const tcgUrl = window._buildBuyLink ? window._buildBuyLink(cardName)
+    : TCG_BASE.replace('{QUERY}', encodeURIComponent(cardName));
+  options.push({ label: 'TCGPlayer', url: tcgUrl, variant: 'buy-option-tcg', priority: 2 });
+
+  // 3. Card Kingdom
+  options.push({ label: 'Card Kingdom', url: ckLink(cardName), variant: 'buy-option-ck', priority: 3 });
+
+  // 4. MTG Arena — only if card is in an Arena-legal set
+  if (arenaLegal) {
+    options.push({ label: 'MTG Arena', url: ARENA_BASE, variant: 'buy-option-arena', priority: 4 });
+  }
+
+  return options;
+}
+
+// ── Auth UI wiring ─────────────────────────────────────────────────
+function wireAuthUI() {
+  // Account button opens modal or shows user menu
+  const accountBtn = document.getElementById('account-btn');
+  if (accountBtn) {
+    accountBtn.addEventListener('click', () => {
+      if (currentUser) showUserMenu();
+      else openAuthModal('signin');
+    });
+  }
+
+  // Modal tabs
+  document.querySelectorAll('.auth-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.auth-tab').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      const mode = tab.dataset.authTab;
+      document.getElementById('auth-submit').textContent = mode === 'signup' ? 'Create account' : 'Sign in';
+      const confirmWrap = document.getElementById('auth-confirm-wrap');
+      if (confirmWrap) confirmWrap.classList.toggle('hidden', mode !== 'signup');
+      const pwInput = document.getElementById('auth-password');
+      if (pwInput) pwInput.autocomplete = mode === 'signup' ? 'new-password' : 'current-password';
+    });
+  });
+
+  // Submit
+  document.getElementById('auth-submit')?.addEventListener('click', async () => {
+    const email    = document.getElementById('auth-email')?.value.trim();
+    const password = document.getElementById('auth-password')?.value;
+    const mode     = document.querySelector('.auth-tab.active')?.dataset.authTab || 'signin';
+    const errEl    = document.getElementById('auth-error');
+    if (!email || !password) { showAuthError('Enter your email and password.'); return; }
+    document.getElementById('auth-submit').disabled = true;
+    document.getElementById('auth-submit').textContent = mode === 'signup' ? 'Creating…' : 'Signing in…';
+    try {
+      if (mode === 'signup') {
+        const confirm = document.getElementById('auth-confirm')?.value;
+        if (confirm && confirm !== password) { showAuthError('Passwords do not match.'); return; }
+        await signUpEmail(email, password);
+        showAuthError('Check your email to confirm your account, then sign in.', 'info');
+      } else {
+        await signInEmail(email, password);
+        closeAuthModal();
+      }
+    } catch (e) {
+      showAuthError(e.message);
+    } finally {
+      const btn = document.getElementById('auth-submit');
+      if (btn) { btn.disabled = false; btn.textContent = mode === 'signup' ? 'Create account' : 'Sign in'; }
+    }
+  });
+
+  // Enter key
+  document.getElementById('auth-password')?.addEventListener('keydown', e => {
+    if (e.key === 'Enter') document.getElementById('auth-submit')?.click();
+  });
+
+  // Google
+  document.getElementById('auth-google')?.addEventListener('click', async () => {
+    try { await signInGoogle(); } catch (e) { showAuthError(e.message); }
+  });
+
+  // Forgot password
+  document.getElementById('auth-forgot')?.addEventListener('click', async e => {
+    e.preventDefault();
+    const email = document.getElementById('auth-email')?.value.trim();
+    if (!email) { showAuthError('Enter your email address first.'); return; }
+    try { await resetPassword(email); showAuthError('Reset email sent — check your inbox.', 'info'); } catch (e2) { showAuthError(e2.message); }
+  });
+
+  // Close
+  document.getElementById('auth-close')?.addEventListener('click', closeAuthModal);
+  document.getElementById('auth-modal')?.addEventListener('click', e => { if (e.target === document.getElementById('auth-modal')) closeAuthModal(); });
+
+  // Auth state changes → update UI
+  onAuthChange(async (user) => {
+    updateAccountLabel(user);
+    if (user) {
+      // Pull cloud data down (merges with any local data)
+      await CloudStore.pullAll();
+      // Push any local-only data up (first login migration)
+      await CloudStore.pushAll();
+      // Pre-fetch inventory so buy buttons are ready
+      await fetchInventory();
+    }
+  });
+}
+
+function openAuthModal(mode = 'signin') {
+  document.getElementById('auth-modal')?.classList.remove('hidden');
+  document.querySelectorAll('.auth-tab').forEach(t => {
+    t.classList.toggle('active', t.dataset.authTab === mode);
+  });
+  const btn = document.getElementById('auth-submit');
+  if (btn) btn.textContent = mode === 'signup' ? 'Create account' : 'Sign in';
+  const confirmWrap = document.getElementById('auth-confirm-wrap');
+  if (confirmWrap) confirmWrap.classList.toggle('hidden', mode !== 'signup');
+  hideAuthError();
+  document.getElementById('auth-email')?.focus();
+}
+function closeAuthModal() { document.getElementById('auth-modal')?.classList.add('hidden'); }
+function showAuthError(msg, type = 'error') {
+  const el = document.getElementById('auth-error');
+  if (!el) return;
+  el.textContent = msg;
+  el.className = type === 'info' ? 'auth-info' : 'auth-error';
+  el.classList.remove('hidden');
+}
+function hideAuthError() {
+  const el = document.getElementById('auth-error');
+  if (el) { el.classList.add('hidden'); el.textContent = ''; }
+}
+
+function updateAccountLabel(user) {
+  const label  = document.getElementById('account-label');
+  const btn    = document.getElementById('account-btn');
+  if (!label || !btn) return;
+  if (user) {
+    const display = user.email === SELLER_EMAIL ? '⚙ Store' : (user.email?.split('@')[0] || 'Account');
+    label.textContent = display;
+    btn.title = `Signed in as ${user.email} — click to sign out`;
+    btn.classList.add('account-signed-in');
+  } else {
+    label.textContent = 'Sign in';
+    btn.title = 'Sign in to sync your decks';
+    btn.classList.remove('account-signed-in');
+  }
+}
+
+function showUserMenu() {
+  // Simple confirm-based sign-out (replace with a dropdown if desired)
+  if (confirm(`Signed in as ${currentUser.email}\n\nSign out?`)) signOut();
+}
+
+
 /**
  * Card helpers, deck math, and storage. No DOM here.
  */
@@ -3247,6 +3898,7 @@ const Render = (() => {
     if (tab === 'collection')  renderCollectionTab();
     if (tab === 'saved')       renderSavedDecksTab();
     if (tab === 'coach')       updateCoachDeckBadge();
+    if (tab === 'inventory')   renderInventoryTab();
   }
 
   /* -------------------------- Commander panel --------------------------- */
@@ -4995,6 +5647,7 @@ const Render = (() => {
     wireCollectionSearch();
     wireSavedDecksTab();
     wireCoachTab();
+    wireInventoryTab();
     $('#owned-only-toggle').addEventListener('change', (e) => {
       state.ownedOnly = e.target.checked; persistOwnedOnly();
       state.recommendations = {};
@@ -5040,7 +5693,7 @@ const Render = (() => {
       const card = id ? state.cardCache.get(id) : null;
       switch (action) {
         case 'add-to-deck':    if (card) addToDeck(card); break;
-        case 'buy':            if (card) window.open(buildBuyLink(card.name), '_blank', 'noopener'); break;
+        case 'buy':            if (card) openBuyOptions(card, e.target); break;
         case 'printings':      if (card) showPrintings(card.name); break;
         case 'deck-remove':    if (card) removeFromDeck(card); break;
         case 'deck-inc':       if (card) adjustBasic(card, 1); break;
@@ -5066,7 +5719,12 @@ const Render = (() => {
   }
 
   async function init() {
+    // Expose buildBuyLink globally so auth.js waterfall can use it
+    window._buildBuyLink = buildBuyLink;
     try { const sym = await Scryfall.symbology(); Render.setSymbology(sym); } catch (_) {}
+    // Init auth (non-blocking — UI shows immediately, data syncs in background)
+    if (typeof wireAuthUI !== 'undefined') wireAuthUI();
+    if (typeof initAuth !== 'undefined') initAuth(); // fire-and-forget
     // Load GC list first — bracket estimate is wrong without it
     await loadGameChangers();
     await loadPersisted();
@@ -5322,6 +5980,262 @@ ${sections}`;
       if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendCoachChat(); }
     });
   }
+
+
+  /* ================================================================
+     BUY OPTIONS WATERFALL — tiered dropdown on every Buy button
+  ================================================================ */
+  let buyDropdown = null;
+
+  function openBuyOptions(card, triggerEl) {
+    closeBuyDropdown();
+    const options = (typeof buyOptions === 'function')
+      ? buyOptions(card.name, card.legalities?.alchemy === 'legal' || card.legalities?.arena === 'legal')
+      : [{ label: 'TCGPlayer', url: buildBuyLink(card.name), variant: 'buy-option-tcg' }];
+
+    const menu = document.createElement('div');
+    menu.className = 'buy-dropdown';
+    menu.setAttribute('role', 'menu');
+
+    const title = document.createElement('div');
+    title.className = 'buy-dropdown-title';
+    title.textContent = 'Buy ' + card.name;
+    menu.appendChild(title);
+
+    options.forEach(opt => {
+      const btn = document.createElement('a');
+      btn.className = 'buy-option ' + (opt.variant || '');
+      btn.href = opt.url;
+      btn.target = '_blank';
+      btn.rel = 'noopener';
+      btn.setAttribute('role', 'menuitem');
+      const labelWrap = document.createElement('div');
+      const nameEl = document.createElement('span');
+      nameEl.className = 'buy-option-name';
+      nameEl.textContent = opt.label;
+      labelWrap.appendChild(nameEl);
+      if (opt.sublabel) {
+        const sub = document.createElement('span');
+        sub.className = 'buy-option-sub';
+        sub.textContent = opt.sublabel;
+        labelWrap.appendChild(sub);
+      }
+      btn.appendChild(labelWrap);
+      const arrow = document.createElement('span');
+      arrow.className = 'buy-option-arrow';
+      arrow.textContent = '→';
+      btn.appendChild(arrow);
+      menu.appendChild(btn);
+    });
+
+    // Position below trigger button
+    document.body.appendChild(menu);
+    buyDropdown = menu;
+    const rect = triggerEl.getBoundingClientRect();
+    const menuH = menu.offsetHeight;
+    let top = rect.bottom + window.scrollY + 4;
+    let left = rect.left + window.scrollX;
+    if (left + 260 > window.innerWidth) left = window.innerWidth - 268;
+    if (top + menuH > window.scrollY + window.innerHeight) top = rect.top + window.scrollY - menuH - 4;
+    menu.style.top = top + 'px';
+    menu.style.left = left + 'px';
+
+    // Close on outside click
+    setTimeout(() => {
+      document.addEventListener('click', closeBuyDropdown, { once: true });
+    }, 10);
+  }
+
+  function closeBuyDropdown() {
+    if (buyDropdown) { buyDropdown.remove(); buyDropdown = null; }
+  }
+
+  /* ================================================================
+     INVENTORY TAB
+  ================================================================ */
+  let invSearchTimeout = null;
+
+  function renderInventoryTab() {
+    const list  = document.getElementById('inv-list');
+    const empty = document.getElementById('inv-empty');
+    const stats = document.getElementById('inv-stats');
+    const owner = document.getElementById('inv-owner-controls');
+
+    // Show/hide owner controls
+    if (owner) owner.classList.toggle('hidden', typeof isOwner === 'undefined' || !isOwner());
+
+    const items = typeof inventoryCache !== 'undefined' ? inventoryCache : [];
+    const filterVal = (document.getElementById('inv-filter')?.value || '').toLowerCase();
+    const sortVal   = document.getElementById('inv-sort')?.value || 'name';
+
+    // Filter
+    let filtered = filterVal
+      ? items.filter(i => i.card_name.toLowerCase().includes(filterVal))
+      : [...items];
+
+    // Sort
+    filtered.sort((a, b) => {
+      if (sortVal === 'name')     return a.card_name.localeCompare(b.card_name);
+      if (sortVal === 'price-hi') return (b.price || 0) - (a.price || 0);
+      if (sortVal === 'price-lo') return (a.price || 0) - (b.price || 0);
+      if (sortVal === 'qty')      return (b.qty || 1) - (a.qty || 1);
+      if (sortVal === 'recent')   return new Date(b.added_at) - new Date(a.added_at);
+      return 0;
+    });
+
+    if (!list) return;
+
+    if (!filtered.length) {
+      list.innerHTML = '';
+      if (empty) empty.classList.remove('hidden');
+    } else {
+      if (empty) empty.classList.add('hidden');
+      const totalValue = items.reduce((s, i) => s + (parseFloat(i.price) || 0) * (i.qty || 1), 0);
+      const totalQty   = items.reduce((s, i) => s + (i.qty || 1), 0);
+      if (stats) {
+        stats.classList.remove('hidden');
+        stats.innerHTML =
+          '<span class="inv-stat"><span class="inv-stat-label">Items</span><span class="inv-stat-value">' + items.length + '</span></span>' +
+          '<span class="inv-stat"><span class="inv-stat-label">Total cards</span><span class="inv-stat-value">' + totalQty + '</span></span>' +
+          '<span class="inv-stat"><span class="inv-stat-label">Est. value</span><span class="inv-stat-value inv-stat-money">$' + totalValue.toFixed(2) + '</span></span>';
+      }
+      list.innerHTML = filtered.map(item => {
+        const price  = item.price ? '$' + parseFloat(item.price).toFixed(2) : '—';
+        const foil   = item.foil ? ' <span class="inv-foil-badge">✨ Foil</span>' : '';
+        const ownerBtns = (typeof isOwner !== 'undefined' && isOwner())
+          ? '<button class="btn btn-ghost btn-xs" data-inv-action="edit" data-inv-id="' + item.id + '">Edit</button>' +
+            '<button class="btn btn-ghost btn-xs" data-inv-action="delete" data-inv-id="' + item.id + '">✕</button>'
+          : '';
+        return '<div class="inv-row" data-inv-id="' + item.id + '">' +
+          (item.image_uri ? '<img class="inv-card-img" src="' + Render.escapeHtml(item.image_uri) + '" alt="" loading="lazy">' : '<div class="inv-card-img inv-no-img"></div>') +
+          '<div class="inv-row-body">' +
+            '<div class="inv-row-name">' + Render.escapeHtml(item.card_name) + foil + '</div>' +
+            '<div class="inv-row-meta">' +
+              '<span class="inv-cond-badge inv-cond-' + item.condition + '">' + Render.escapeHtml(item.condition || 'NM') + '</span>' +
+              '<span class="inv-qty">×' + (item.qty || 1) + '</span>' +
+              '<span class="inv-price">' + price + '</span>' +
+            '</div>' +
+          '</div>' +
+          '<div class="inv-row-actions">' + ownerBtns + '</div>' +
+        '</div>';
+      }).join('');
+    }
+
+    // Wire filter/sort
+    document.getElementById('inv-filter')?.addEventListener('input', () => renderInventoryTab());
+    document.getElementById('inv-sort')?.addEventListener('change', () => renderInventoryTab());
+
+    // Fetch latest from Supabase if configured
+    if (typeof fetchInventory !== 'undefined') {
+      fetchInventory().then(() => renderInventoryTab());
+    }
+  }
+
+  function wireInventoryTab() {
+    // Add card button
+    document.getElementById('inv-add-btn')?.addEventListener('click', () => {
+      document.getElementById('inv-add-form')?.classList.remove('hidden');
+      document.getElementById('inv-card-search')?.focus();
+    });
+    document.getElementById('inv-cancel-btn')?.addEventListener('click', () => {
+      document.getElementById('inv-add-form')?.classList.add('hidden');
+      resetInvForm();
+    });
+
+    // Card search autocomplete
+    const invSearch = document.getElementById('inv-card-search');
+    const invSugg   = document.getElementById('inv-card-suggestions');
+    if (invSearch && invSugg) {
+      invSearch.addEventListener('input', () => {
+        clearTimeout(invSearchTimeout);
+        const q = invSearch.value.trim();
+        if (q.length < 2) { invSugg.innerHTML = ''; return; }
+        invSearchTimeout = setTimeout(async () => {
+          try {
+            const ac = await Scryfall.autocomplete(q);
+            invSugg.innerHTML = (ac.data || []).slice(0, 8).map(name =>
+              '<li data-name="' + Render.escapeHtml(name) + '">' + Render.escapeHtml(name) + '</li>'
+            ).join('');
+          } catch {}
+        }, 300);
+      });
+      invSugg.addEventListener('click', e => {
+        const li = e.target.closest('li[data-name]');
+        if (!li) return;
+        invSearch.value = li.dataset.name;
+        invSugg.innerHTML = '';
+      });
+    }
+
+    // Save new item
+    document.getElementById('inv-save-btn')?.addEventListener('click', async () => {
+      const name  = document.getElementById('inv-card-search')?.value.trim();
+      const qty   = parseInt(document.getElementById('inv-qty')?.value || '1');
+      const price = parseFloat(document.getElementById('inv-price')?.value || '0') || null;
+      const cond  = document.getElementById('inv-condition')?.value || 'NM';
+      const foil  = document.getElementById('inv-foil')?.checked || false;
+      if (!name) { toast('Enter a card name.', true); return; }
+      try {
+        // Fetch image from Scryfall
+        let imageUri = null;
+        try {
+          const card = await Scryfall.named(name);
+          imageUri = card.image_uris?.small || card.card_faces?.[0]?.image_uris?.small || null;
+        } catch {}
+        await addInventoryItem({ card_name: name, qty, price, condition: cond, foil, image_uri: imageUri });
+        document.getElementById('inv-add-form')?.classList.add('hidden');
+        resetInvForm();
+        renderInventoryTab();
+        toast('Added ' + name + ' to inventory.');
+      } catch (e) {
+        toast('Error: ' + e.message, true);
+      }
+    });
+
+    // Delete / edit delegation
+    document.getElementById('inv-list')?.addEventListener('click', async e => {
+      const btn = e.target.closest('[data-inv-action]');
+      if (!btn) return;
+      const id = parseInt(btn.dataset.invId);
+      if (btn.dataset.invAction === 'delete') {
+        if (!confirm('Remove this card from inventory?')) return;
+        try { await deleteInventoryItem(id); renderInventoryTab(); toast('Removed from inventory.'); } catch (err) { toast(err.message, true); }
+      }
+    });
+
+    // Export CSV
+    document.getElementById('inv-export-btn')?.addEventListener('click', () => {
+      const rows = ['Card Name,Qty,Price,Condition,Foil,Added'];
+      inventoryCache.forEach(i => {
+        rows.push([
+          '"' + i.card_name.replace(/"/g,'""') + '"',
+          i.qty || 1,
+          i.price || '',
+          i.condition || 'NM',
+          i.foil ? 'Yes' : 'No',
+          new Date(i.added_at).toLocaleDateString()
+        ].join(','));
+      });
+      const blob = new Blob([rows.join('\n')], { type: 'text/csv' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'md-collectiblez-inventory.csv';
+      a.click();
+    });
+  }
+
+  function resetInvForm() {
+    const f = (id) => document.getElementById(id);
+    if (f('inv-card-search')) f('inv-card-search').value = '';
+    if (f('inv-qty'))         f('inv-qty').value = '1';
+    if (f('inv-price'))       f('inv-price').value = '';
+    if (f('inv-condition'))   f('inv-condition').value = 'NM';
+    if (f('inv-foil'))        f('inv-foil').checked = false;
+    const sugg = f('inv-card-suggestions');
+    if (sugg) sugg.innerHTML = '';
+  }
+
+  /* Wire inventory tab into wireEvents */
 
   document.addEventListener('DOMContentLoaded', init);
 })();
