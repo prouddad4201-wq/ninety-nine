@@ -4149,22 +4149,38 @@ const Render = (() => {
    * meaningful lord/payoff suite for them, so they'd be a dead end in the picker.
    */
   const KNOWN_TRIBES = [
+    // Core high-support tribes — lords, anthems, dedicated sets
     'Elf','Goblin','Zombie','Vampire','Dragon','Wizard','Warrior','Knight',
     'Merfolk','Human','Soldier','Angel','Demon','Beast','Dinosaur','Cat',
     'Bird','Snake','Sliver','Treefolk','Faerie','Dwarf','Giant','Elemental',
+    // Class/role subtypes with real tribal support
     'Artificer','Cleric','Rogue','Shaman','Druid','Ranger','Warlock','Monk',
+    // Plane-specific tribes
     'Pirate','Ninja','Samurai','Spirit','Skeleton','Rat','Spider',
-    'Wolf','Werewolf','Kor','Kithkin','Squirrel','Construct',
-    'Golem','Ally','Sphinx','Drake','Hydra','Wurm',
+    'Wolf','Werewolf','Kor','Kithkin','Squirrel',
+    // Artifact creature tribes
+    'Construct','Golem','Myr','Servo','Thopter','Scarecrow',
+    // Sea & water creatures
+    'Whale','Shark','Kraken','Leviathan','Serpent','Crab','Octopus','Turtle',
+    // Other creature types with 10+ tribal-matters cards
+    'Ally','Sphinx','Drake','Hydra','Wurm','Ooze',
     'Orc','Centaur','Minotaur','Satyr','Naga','Lizard',
     'Insect','Bat','Fox','Boar','Rhino','Bear','Frog','Phoenix',
     'Unicorn','Pegasus','Griffin','Djinn','Efreet',
-    'Gnome','Pixie','Imp','Devil','Gremlin','Homunculus',
+    'Devil','Imp','Gremlin','Homunculus','Gnome',
     'Scout','Assassin','Berserker','Barbarian','Archer',
     'Noble','Advisor','Citizen','Mercenary',
-    'Eldrazi','Ooze',
-    'Plant','Saproling','Myr','Servo','Thopter','Scarecrow',
-    'Whale','Shark','Kraken','Leviathan','Serpent',
+    // Eldrazi have full tribal support
+    'Eldrazi',
+    // Plant/fungus with saproling synergy packages
+    'Plant','Saproling','Fungus',
+    // Additional creature types with real payoffs
+    'Raccoon','Mouse','Rabbit','Mongoose','Ape','Elephant',
+    'Hippo','Crocodile','Scorpion','Toad','Salamander',
+    'Manticore','Chimera','Cockatrice','Basilisk',
+    'Archon','Avatar','Nightmare','Specter','Shade','Wraith',
+    // Horror/Phyrexian/God have niche but real tribal support
+    'Horror','Phyrexian','God',
   ];
 
   /**
@@ -4330,17 +4346,67 @@ const Render = (() => {
         if (tribes.length) {
           // We know the tribe(s) — build a tribe-locked query list, dropping the generic ones.
           effectiveQueries = [];
+
+          // MTG uses irregular plurals in oracle text — map them correctly
+          const PLURAL_MAP = {
+            elf: 'elves', wolf: 'wolves', werewolf: 'werewolves',
+            zombie: 'zombies', vampire: 'vampires', dragon: 'dragons',
+            wizard: 'wizards', warrior: 'warriors', knight: 'knights',
+            merfolk: 'merfolk', human: 'humans', soldier: 'soldiers',
+            angel: 'angels', demon: 'demons', beast: 'beasts',
+            dinosaur: 'dinosaurs', cat: 'cats', bird: 'birds',
+            snake: 'snakes', faerie: 'faeries', dwarf: 'dwarves',
+            giant: 'giants', goblin: 'goblins', sliver: 'slivers',
+            treefolk: 'treefolk', elemental: 'elementals',
+            artificer: 'artificers', cleric: 'clerics', rogue: 'rogues',
+            shaman: 'shamans', druid: 'druids', ranger: 'rangers',
+            pirate: 'pirates', ninja: 'ninjas', samurai: 'samurai',
+            spirit: 'spirits', skeleton: 'skeletons', rat: 'rats',
+            spider: 'spiders', construct: 'constructs', golem: 'golems',
+            ally: 'allies', sphinx: 'sphinxes', hydra: 'hydras',
+            orc: 'orcs', centaur: 'centaurs', minotaur: 'minotaurs',
+            satyr: 'satyrs', naga: 'nagas', insect: 'insects',
+            bat: 'bats', bear: 'bears', myr: 'myr', fungus: 'fungi',
+            mouse: 'mice', elf: 'elves', ox: 'oxen', sphinx: 'sphinxes',
+          };
+
           tribes.forEach(tribe => {
-            const t = tribe.toLowerCase();
-            // Creatures of this exact type
-            effectiveQueries.push({ q: `t:${t} -t:legendary`, cap: 22 });
-            // Lords / anthem effects that name THIS type specifically
-            effectiveQueries.push({ q: `(o:"${t}s get +" OR o:"${t}s you control get" OR o:"other ${t}s you control get")`, cap: 8 });
-            // Spells that care about the type by name (tutors, payoffs) but aren't the creature itself
-            effectiveQueries.push({ q: `o:"${t}" -t:${t}`, cap: 6 });
+            const t  = tribe.toLowerCase();
+            const tp = PLURAL_MAP[t] || (t.endsWith('s') ? t : t + 's');
+
+            // ── Creatures ──────────────────────────────────────────────────────
+            // Non-legendary creatures of the type (bulk of the tribe)
+            effectiveQueries.push({ q: `t:${t} t:creature -t:legendary`, cap: 24 });
+            // Legendary creatures of the type (tribal legends like Krenko, Marrow-Gnawer)
+            effectiveQueries.push({ q: `t:${t} t:legendary t:creature`, cap: 6 });
+
+            // ── Lords & anthems ─────────────────────────────────────────────────
+            // +1/+1 anthem lords ("Other Elves you control get +1/+1")
+            effectiveQueries.push({ q: `o:"${tp} you control get +" OR o:"other ${tp} you control get +" OR o:"${tp} get +1" OR o:"${tp} get +2"`, cap: 10 });
+            // Keyword lords ("Goblins you control have haste", "Elves you control have trample")
+            effectiveQueries.push({ q: `o:"${tp} you control have" OR o:"other ${tp} you control have"`, cap: 6 });
+
+            // ── Non-creature tribal payoffs ─────────────────────────────────────
+            // Instants that care about the tribe (Goblin Grenade, Elvish Guidance)
+            effectiveQueries.push({ q: `o:"${tp}" -t:creature t:instant`, cap: 5 });
+            // Sorceries (Elvish Promenade, Goblin War Strike)
+            effectiveQueries.push({ q: `o:"${tp}" -t:creature t:sorcery`, cap: 5 });
+            // Artifacts & enchantments (Coat of Arms, Door of Destinies, Shared Animosity)
+            effectiveQueries.push({ q: `o:"${tp}" -t:creature (t:artifact OR t:enchantment)`, cap: 8 });
+
+            // ── Token producers & tutors ────────────────────────────────────────
+            // Creates tokens of the type ("create a 1/1 green Elf creature token")
+            effectiveQueries.push({ q: `o:"${t} creature token" OR o:"${tp} creature tokens"`, cap: 6 });
+            // Tutors for the type ("search your library for an Elf")
+            effectiveQueries.push({ q: `o:"search your library for a ${t}" OR o:"search your library for an ${t}"`, cap: 4 });
           });
-          // Changelings count as every creature type — always relevant tribal filler
-          effectiveQueries.push({ q: 'o:changeling', cap: 4 });
+
+          // ── Universal tribal support (not type-specific) ──────────────────────
+          // Changelings count as every creature type
+          effectiveQueries.push({ q: 'o:changeling t:creature', cap: 5 });
+          // Non-creature universal tribal payoffs (Kindred Discovery, Kindred Summons, etc.)
+          effectiveQueries.push({ q: 'otag:lord -t:creature', cap: 8 });
+          effectiveQueries.push({ q: 'otag:tribal -t:creature', cap: 6 });
         } else {
           // No tribe could be determined at all (no manual pick, nothing on the commander) —
           // fall back to the generic lord/tribal pool so the build doesn't come back empty.
