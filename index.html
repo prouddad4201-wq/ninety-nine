@@ -1737,6 +1737,20 @@ select { cursor: pointer; }
               <option value="enchantress">Enchantress — enchantment synergies</option>
               <option value="artifacts">Artifacts — artifact synergies &amp; combos</option>
               <option value="tribal">Tribal — stack one creature type</option>
+              <optgroup label="──────────────────">
+              <optgroup label="Legendary &amp; Themes">
+              <option value="heroes">Heroes — legendary creature matters</option>
+              <option value="villains">Villains — drain, discard, sacrifice</option>
+              <option value="dragons">Dragon Tribal — dedicated Dragon build</option>
+              <optgroup label="Strategy">
+              <option value="flicker">Flicker / Blink — ETB abuse</option>
+              <option value="graveyard">Graveyard — self-mill &amp; recursion</option>
+              <option value="counters">Counters — +1/+1 counter stacking</option>
+              <option value="proliferate">Proliferate — spread all counters</option>
+              <option value="theft">Theft — take opponents' stuff</option>
+              <option value="extraturns">Extra Turns — time manipulation</option>
+              <option value="politics">Politics — goad, monarch, voting</option>
+              <option value="grouphug">Group Hug — share resources, sneak a win</option>
             </select>
           </div>
 
@@ -3000,6 +3014,137 @@ const ARCHETYPES = {
       { q: 'otag:changeling', cap: 4 },
     ],
     tribalMode: true,  // signals autoBuild to extract creature types and add type-specific queries
+  },
+  heroes: {
+    label: 'Heroes',
+    detail: 'Legendary matters — legendary creatures, sagas, and cards that care about having legendary permanents. Powerful individuals powering a larger team.',
+    slots: { ramp: 9, removal: 8, wipes: 2, draw: 9, creatures: 22, spells: 8, tutors: 3, other: 1 },
+    queries: [
+      { q: 't:legendary t:creature', cap: 22 },
+      { q: 'o:"legendary creatures you control" OR o:"legendary creature enters"', cap: 10 },
+      { q: 'o:"historic" OR o:"saga"', cap: 8 },
+      { q: 'o:"whenever a legendary creature"', cap: 8 },
+      { q: 't:saga', cap: 6 },
+    ],
+  },
+  villains: {
+    label: 'Villains',
+    detail: 'Drain life, force discards, make opponents sacrifice. Win through misery — every action punishes the table.',
+    slots: { ramp: 9, removal: 7, wipes: 3, draw: 9, creatures: 14, spells: 10, tutors: 4, other: 6 },
+    queries: [
+      { q: 'o:"each opponent loses" OR o:"each player loses"', cap: 14 },
+      { q: 'otag:discard', cap: 10 },
+      { q: 'o:"sacrifice a creature" OR o:"sacrifice a permanent"', cap: 10 },
+      { q: 'o:"whenever an opponent"', cap: 10 },
+      { q: 'otag:drain', cap: 8 },
+    ],
+  },
+  proliferate: {
+    label: 'Proliferate',
+    detail: 'Spread counters everywhere — loyalty, +1/+1, poison, charge. Win with planeswalker ultimates, lethal poison, or overwhelming counter-stacked creatures.',
+    slots: { ramp: 9, removal: 7, wipes: 2, draw: 9, creatures: 14, spells: 12, tutors: 3, other: 6 },
+    queries: [
+      { q: 'o:proliferate', cap: 20 },
+      { q: 'o:"counter on each"', cap: 10 },
+      { q: 't:planeswalker', cap: 8 },
+      { q: 'o:"+1/+1 counter" otag:value', cap: 10 },
+      { q: 'o:"infect" OR o:"toxic" OR o:"poison counter"', cap: 6 },
+    ],
+  },
+  counters: {
+    label: 'Counters',
+    detail: 'Load creatures with +1/+1 counters, trigger abilities that care about counters, and win through trampling creatures or combo.',
+    slots: { ramp: 9, removal: 6, wipes: 2, draw: 9, creatures: 22, spells: 8, tutors: 3, other: 3 },
+    queries: [
+      { q: 'otag:counters-matter', cap: 16 },
+      { q: 'o:"put a +1/+1 counter"', cap: 16 },
+      { q: 'o:"whenever a creature you control gets a +1/+1 counter"', cap: 8 },
+      { q: 'o:"modular" OR o:"evolve" OR o:"adapt" OR o:"mentor"', cap: 8 },
+      { q: 'o:"move" o:"counter"', cap: 6 },
+    ],
+  },
+  flicker: {
+    label: 'Flicker / Blink',
+    detail: 'Blink creatures to retrigger enter-the-battlefield effects. Every ETB is a resource — abuse them endlessly.',
+    slots: { ramp: 8, removal: 6, wipes: 2, draw: 9, creatures: 22, spells: 12, tutors: 3, other: 0 },
+    queries: [
+      { q: 'otag:blink', cap: 16 },
+      { q: 'otag:etb', cap: 18 },
+      { q: 'o:"exile target creature you control" OR o:"blink"', cap: 10 },
+      { q: 'o:"when ~ enters" OR o:"when ~ enters the battlefield"', cap: 12 },
+    ],
+  },
+  theft: {
+    label: 'Theft',
+    detail: 'Take opponents\' best spells and permanents. Their deck fuels your strategy while leaving them with nothing.',
+    slots: { ramp: 9, removal: 6, wipes: 3, draw: 9, creatures: 12, spells: 14, tutors: 4, other: 5 },
+    queries: [
+      { q: 'o:"gain control of target" OR o:"gain control of target creature"', cap: 16 },
+      { q: 'o:"cast spells from opponents\' libraries" OR o:"cast spells your opponents own"', cap: 8 },
+      { q: 'o:"you may cast" o:"from" o:"exile"', cap: 10 },
+      { q: 'o:"cast target spell" OR o:"copy target spell"', cap: 8 },
+      { q: 'otag:theft', cap: 10 },
+    ],
+  },
+  graveyard: {
+    label: 'Graveyard',
+    detail: 'The graveyard is a second hand. Mill yourself, fill it with threats, and recur your best cards every turn.',
+    slots: { ramp: 8, removal: 5, wipes: 2, draw: 8, creatures: 20, spells: 10, tutors: 4, other: 5 },
+    queries: [
+      { q: 'otag:graveyard-matters', cap: 16 },
+      { q: 'otag:self-mill', cap: 10 },
+      { q: 'otag:reanimation', cap: 10 },
+      { q: 'o:"from your graveyard" OR o:"from a graveyard"', cap: 12 },
+      { q: 'o:"whenever a creature dies"', cap: 8 },
+    ],
+  },
+  politics: {
+    label: 'Politics',
+    detail: 'Make deals, goad enemies into each other, vote your way to advantage, and use the monarchy and initiative to fuel your engine.',
+    slots: { ramp: 8, removal: 7, wipes: 3, draw: 10, creatures: 14, spells: 8, tutors: 2, other: 10 },
+    queries: [
+      { q: 'o:goad OR o:"goad target"', cap: 10 },
+      { q: 'o:"vote" OR o:"council\'s dilemma" OR o:"will of the council"', cap: 10 },
+      { q: 'o:"monarch" OR o:"initiative" OR o:"the monarch"', cap: 10 },
+      { q: 'o:"for each opponent" OR o:"each other player"', cap: 10 },
+      { q: 'otag:group-slug OR otag:politics', cap: 8 },
+    ],
+  },
+  grouphug: {
+    label: 'Group Hug',
+    detail: 'Give everyone cards and resources, make friends at the table, then slip in a win condition while no one suspects you.',
+    slots: { ramp: 10, removal: 4, wipes: 2, draw: 14, creatures: 10, spells: 10, tutors: 2, other: 10 },
+    queries: [
+      { q: 'o:"each player draws" OR o:"each opponent draws"', cap: 14 },
+      { q: 'o:"each player may" OR o:"players may"', cap: 10 },
+      { q: 'otag:group-hug', cap: 14 },
+      { q: 'o:"each opponent gains" OR o:"each player gains"', cap: 8 },
+      { q: 'o:"everyone" OR o:"all players"', cap: 6 },
+    ],
+  },
+  extraturns: {
+    label: 'Extra Turns',
+    detail: 'Take extra turns, untap everything, and give opponents no chance to respond. Assemble infinite turns for a clean win.',
+    slots: { ramp: 10, removal: 6, wipes: 2, draw: 11, creatures: 8, spells: 16, tutors: 5, other: 4 },
+    queries: [
+      { q: 'o:"take an extra turn" OR o:"takes an extra turn"', cap: 14 },
+      { q: 'o:"untap all" OR o:"untap each"', cap: 10 },
+      { q: 'otag:extra-turn', cap: 10 },
+      { q: 'o:"time walk" OR o:"temporal manipulation"', cap: 4 },
+      { q: 'otag:tutor cmc<=2', cap: 10 },
+    ],
+  },
+  dragons: {
+    label: 'Dragon Tribal',
+    detail: 'Dedicated Dragon synergy — ramp into massive flyers, run every Dragon lord, and close with Hoard and Hellkite power.',
+    slots: { ramp: 12, removal: 6, wipes: 2, draw: 8, creatures: 22, spells: 6, tutors: 4, other: 2 },
+    queries: [
+      { q: 't:dragon t:creature', cap: 22 },
+      { q: 'o:"dragons you control" OR o:"dragon you control"', cap: 10 },
+      { q: 'o:"dragon" t:instant OR t:sorcery', cap: 6 },
+      { q: 'otag:ramp cmc<=3', cap: 12 },
+      { q: 'o:changeling t:creature', cap: 4 },
+    ],
   },
 };
 
