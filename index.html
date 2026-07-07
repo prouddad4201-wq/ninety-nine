@@ -5941,6 +5941,151 @@ const Render = (() => {
     } catch (_) { state.gameChangerNames = new Set(); }
   }
 
+  /* ================================================================
+     CARD DETAIL MODAL — click any card tile to open
+  ================================================================ */
+  let cdmFlipState = 0;
+  let cdmCurrentCard = null;
+
+  function openCardDetail(card) {
+    if (!card) return;
+    cdmCurrentCard = card;
+    cdmFlipState = 0;
+    const modal = $('#card-detail-modal');
+    if (!modal) return;
+    populateCardDetail(card, 0);
+    modal.classList.remove('hidden');
+    modal.onclick = (e) => { if (e.target === modal) closeCardDetail(); };
+  }
+
+  function closeCardDetail() {
+    $('#card-detail-modal')?.classList.add('hidden');
+    cdmCurrentCard = null;
+  }
+
+  function populateCardDetail(card, face) {
+    const faces = card.card_faces;
+    const isMDFC = faces && faces.length >= 2;
+    const data = isMDFC ? faces[face] : card;
+
+    const imgEl  = $('#cdm-img');
+    const skelEl = $('#cdm-img-skeleton');
+    const imgUrl = data.image_uris?.normal || data.image_uris?.large
+      || card.image_uris?.normal || card.image_uris?.large || '';
+    if (imgEl) {
+      imgEl.style.opacity = '0';
+      if (skelEl) skelEl.style.display = 'block';
+      imgEl.onload  = () => { imgEl.style.opacity = '1'; if (skelEl) skelEl.style.display = 'none'; };
+      imgEl.onerror = () => { if (skelEl) skelEl.style.display = 'none'; imgEl.style.opacity = '1'; };
+      imgEl.src = imgUrl; imgEl.alt = card.name;
+    }
+    const flipWrap = $('#cdm-flip-btn-wrap');
+    if (flipWrap) flipWrap.classList.toggle('hidden', !isMDFC);
+
+    const nameEl = $('#cdm-name'); const costEl = $('#cdm-cost');
+    if (nameEl) nameEl.textContent = card.name;
+    if (costEl) costEl.innerHTML   = Render.manaCost(data.mana_cost || card.mana_cost || '');
+
+    const typeEl = $('#cdm-type');
+    if (typeEl) typeEl.textContent = data.type_line || card.type_line || '';
+
+    const oracleEl = $('#cdm-oracle');
+    if (oracleEl) {
+      const raw = (data.oracle_text || card.oracle_text || '');
+      oracleEl.innerHTML = raw
+        .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+        .replace(/\{([^}]+)\}/g, (_, sym) => {
+          const s = document.createElement('span');
+          s.className = 'mana-symbol-fallback'; s.textContent = sym;
+          return s.outerHTML;
+        })
+        .replace(/\n/g, '<br>');
+    }
+    const flavorEl = $('#cdm-flavor');
+    if (flavorEl) {
+      const ft = data.flavor_text || card.flavor_text || '';
+      flavorEl.textContent = ft;
+      flavorEl.classList.toggle('hidden', !ft);
+    }
+    const ptEl = $('#cdm-pt');
+    if (ptEl) {
+      let pt = '';
+      if (data.power != null) pt = `${data.power} / ${data.toughness}`;
+      if (data.loyalty != null) pt = `Loyalty: ${data.loyalty}`;
+      ptEl.textContent = pt; ptEl.classList.toggle('hidden', !pt);
+    }
+    const setEl = $('#cdm-set'); const rarityEl = $('#cdm-rarity');
+    const priceEl = $('#cdm-price'); const cmcEl = $('#cdm-cmc');
+    if (setEl)    setEl.textContent    = `${card.set_name || ''} (${(card.set||'').toUpperCase()})`;
+    if (rarityEl) rarityEl.textContent = card.rarity ? card.rarity[0].toUpperCase()+card.rarity.slice(1) : '';
+    if (priceEl) {
+      const usd = parseFloat(card.prices?.usd || '0');
+      priceEl.textContent = usd > 0 ? `$${usd.toFixed(2)}` : '—';
+      priceEl.className   = 'cdm-meta-val cdm-price-val' + (usd > 20 ? ' cdm-price-hi' : usd > 5 ? ' cdm-price-mid' : '');
+    }
+    if (cmcEl) cmcEl.textContent = card.cmc != null ? card.cmc : '';
+
+    const legEl = $('#cdm-legality');
+    if (legEl) {
+      const fmts = ['commander','pioneer','modern','standard','legacy','vintage'];
+      const leg   = card.legalities || {};
+      legEl.innerHTML = fmts.map(f => {
+        const st  = leg[f] || 'not_legal';
+        const lbl = f[0].toUpperCase() + f.slice(1);
+        const cls = st === 'legal' ? 'cdm-leg-legal' : st === 'banned' ? 'cdm-leg-banned' : 'cdm-leg-not';
+        return `<span class="cdm-leg-pill ${cls}">${lbl}</span>`;
+      }).join('');
+    }
+    const actEl = $('#cdm-actions');
+    if (actEl) {
+      const inDeck = state.deck.some(e => e.card.id === card.id);
+      const inColl = state.collection.has(card.name.toLowerCase());
+      actEl.innerHTML =
+        `<button class="btn btn-primary" data-action="cdm-add-deck" data-id="${Render.escapeHtml(card.id)}">${inDeck ? '\u2713 In deck' : '+ Add to deck'}</button>` +
+        `<button class="btn btn-secondary" data-action="cdm-buy" data-id="${Render.escapeHtml(card.id)}">Buy</button>` +
+        (inColl ? '' : `<button class="btn btn-ghost" data-action="cdm-add-coll" data-id="${Render.escapeHtml(card.id)}">+ Collection</button>`);
+    }
+    const buyEl = $('#cdm-buy-section');
+    if (buyEl) {
+      const inv = typeof inventoryHas !== 'undefined' ? inventoryHas(card.name) : null;
+      buyEl.innerHTML = (inv && inv.qty > 0)
+        ? `<div class="cdm-store-badge"><span class="cdm-store-label">\uD83D\uDFE2 In stock \u2014 MD Collectiblez</span><span class="cdm-store-meta">${inv.qty} \u00d7 ${inv.condition}${inv.foil ? ' \u2728' : ''}${inv.price ? ' \u2014 $' + parseFloat(inv.price).toFixed(2) : ''}</span></div>`
+        : '';
+    }
+  }
+
+  function wireCardDetailModal() {
+    $('#cdm-close')?.addEventListener('click', closeCardDetail);
+    document.addEventListener('keydown', e => { if (e.key === 'Escape' && cdmCurrentCard) closeCardDetail(); });
+    $('#cdm-flip-btn')?.addEventListener('click', () => {
+      if (!cdmCurrentCard?.card_faces) return;
+      cdmFlipState = cdmFlipState === 0 ? 1 : 0;
+      populateCardDetail(cdmCurrentCard, cdmFlipState);
+    });
+    $('#cdm-actions')?.addEventListener('click', e => {
+      const btn = e.target.closest('[data-action]'); if (!btn) return;
+      const id  = btn.dataset.id;
+      const card = id ? state.cardCache.get(id) : null; if (!card) return;
+      switch (btn.dataset.action) {
+        case 'cdm-add-deck':
+          addToDeck(card); populateCardDetail(card, cdmFlipState); break;
+        case 'cdm-buy':
+          openBuyOptions(card, btn); break;
+        case 'cdm-add-coll':
+          fetchAndAddToCollection(card.name).then(() => populateCardDetail(card, cdmFlipState)); break;
+      }
+    });
+    // Global tile click handler
+    document.body.addEventListener('click', e => {
+      if (e.target.closest('button, a, select, input, [data-action]')) return;
+      const tile = e.target.closest('.card-tile, .rec-card');
+      if (!tile) return;
+      const id   = tile.dataset.id; if (!id) return;
+      const card = state.cardCache.get(id);
+      if (card) openCardDetail(card);
+    });
+  }
+
   function wireEvents() {
     $$('.tab-btn').forEach((b) => b.addEventListener('click', () => switchTab(b.dataset.tab)));
     wireCommanderSearch(0); wireCommanderSearch(1);
