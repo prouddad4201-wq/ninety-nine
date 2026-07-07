@@ -1661,10 +1661,7 @@ select { cursor: pointer; }
       <svg class="tab-icon" viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 2h10l2 4H3z"/><rect x="2" y="6" width="16" height="12" rx="2"/><path d="M10 10v5M7 13l3 3 3-3"/></svg>
       <span class="tab-label">Saved</span>
     </button>
-    <button class="tab-btn" role="tab" id="tab-inventory" data-tab="inventory" aria-controls="panel-inventory" aria-selected="false">
-      <svg class="tab-icon" viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="3" width="16" height="4" rx="1"/><rect x="2" y="9" width="16" height="4" rx="1"/><path d="M2 17h16"/><path d="M6 11v2M10 11v2M14 11v2"/></svg>
-      <span class="tab-label">Inventory</span>
-    </button>
+
     <button class="tab-btn" role="tab" id="tab-coach" data-tab="coach" aria-controls="panel-coach" aria-selected="false">
       <svg class="tab-icon" viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="10" cy="10" r="8"/><path d="M10 6v4l3 3"/><circle cx="10" cy="3" r="1" fill="currentColor"/></svg>
       <span class="tab-label">Coach</span>
@@ -2002,79 +1999,6 @@ select { cursor: pointer; }
       </div>
     </section>
 
-    <!-- ===================== Inventory (Seller) ===================== -->
-    <section id="panel-inventory" class="tab-panel hidden" data-panel="inventory" role="tabpanel" aria-labelledby="tab-inventory">
-      <div class="inv-header">
-        <div>
-          <h2>Seller Inventory</h2>
-          <p class="panel-intro">Cards MD Collectiblez has in stock. Logged-in users see these first on every card&#8217;s buy options. Only the store account can edit this list.</p>
-        </div>
-        <div id="inv-owner-controls" class="hidden">
-          <button id="inv-add-btn" type="button" class="btn btn-primary">+ Add card</button>
-          <button id="inv-export-btn" type="button" class="btn btn-secondary">Export CSV</button>
-        </div>
-      </div>
-
-      <!-- Add card form (owner only) -->
-      <div id="inv-add-form" class="inv-add-form hidden">
-        <div class="inv-form-grid">
-          <div class="inv-form-field">
-            <label>Card name</label>
-            <div class="coll-search-wrap" style="max-width:320px">
-              <input type="text" id="inv-card-search" placeholder="Search card name…" autocomplete="off" spellcheck="false">
-              <ul id="inv-card-suggestions" class="suggestions-list"></ul>
-            </div>
-          </div>
-          <div class="inv-form-field">
-            <label>Qty</label>
-            <input type="number" id="inv-qty" value="1" min="1" max="999" style="width:80px">
-          </div>
-          <div class="inv-form-field">
-            <label>Your price ($)</label>
-            <input type="number" id="inv-price" placeholder="e.g. 4.99" min="0" step="0.01" style="width:120px">
-          </div>
-          <div class="inv-form-field">
-            <label>Condition</label>
-            <select id="inv-condition">
-              <option value="NM">NM</option>
-              <option value="LP">LP</option>
-              <option value="MP">MP</option>
-              <option value="HP">HP</option>
-              <option value="DMG">DMG</option>
-            </select>
-          </div>
-          <div class="inv-form-field">
-            <label>Foil?</label>
-            <input type="checkbox" id="inv-foil" style="width:auto;margin-top:10px">
-          </div>
-        </div>
-        <div style="display:flex;gap:.5rem;margin-top:.75rem">
-          <button id="inv-save-btn" type="button" class="btn btn-primary">Save</button>
-          <button id="inv-cancel-btn" type="button" class="btn btn-ghost">Cancel</button>
-        </div>
-      </div>
-
-      <!-- Stats bar -->
-      <div id="inv-stats" class="inv-stats hidden"></div>
-
-      <!-- Filter row -->
-      <div class="inv-filter-row">
-        <input type="text" id="inv-filter" placeholder="Filter by name…" autocomplete="off">
-        <select id="inv-sort">
-          <option value="name">Name A–Z</option>
-          <option value="price-hi">Price: high to low</option>
-          <option value="price-lo">Price: low to high</option>
-          <option value="qty">Quantity</option>
-          <option value="recent">Recently added</option>
-        </select>
-      </div>
-
-      <!-- Inventory list -->
-      <div id="inv-list" class="inv-list"></div>
-      <div id="inv-empty" class="inv-empty hidden">
-        <p>No inventory yet. Add cards using the button above.</p>
-      </div>
-    </section>
 
     <!-- ===================== AI Coach ===================== -->
     <section id="panel-coach" class="tab-panel hidden" data-panel="coach" role="tabpanel" aria-labelledby="tab-coach">
@@ -4210,7 +4134,6 @@ const Render = (() => {
     if (tab === 'collection')  renderCollectionTab();
     if (tab === 'saved')       renderSavedDecksTab();
     if (tab === 'coach')       updateCoachDeckBadge();
-    if (tab === 'inventory')   renderInventoryTab();
   }
 
   /* -------------------------- Commander panel --------------------------- */
@@ -6025,7 +5948,6 @@ const Render = (() => {
     wireCollectionSearch();
     wireSavedDecksTab();
     wireCoachTab();
-    wireInventoryTab();
     wireCardDetailModal();
     $('#owned-only-toggle').addEventListener('change', (e) => {
       state.ownedOnly = e.target.checked; persistOwnedOnly();
@@ -6432,187 +6354,6 @@ ${sections}`;
   /* ================================================================
      INVENTORY TAB
   ================================================================ */
-  let invSearchTimeout = null;
-
-  function renderInventoryTab() {
-    const list  = document.getElementById('inv-list');
-    const empty = document.getElementById('inv-empty');
-    const stats = document.getElementById('inv-stats');
-    const owner = document.getElementById('inv-owner-controls');
-
-    // Show/hide owner controls
-    if (owner) owner.classList.toggle('hidden', typeof isOwner === 'undefined' || !isOwner());
-
-    const items = typeof inventoryCache !== 'undefined' ? inventoryCache : [];
-    const filterVal = (document.getElementById('inv-filter')?.value || '').toLowerCase();
-    const sortVal   = document.getElementById('inv-sort')?.value || 'name';
-
-    // Filter
-    let filtered = filterVal
-      ? items.filter(i => i.card_name.toLowerCase().includes(filterVal))
-      : [...items];
-
-    // Sort
-    filtered.sort((a, b) => {
-      if (sortVal === 'name')     return a.card_name.localeCompare(b.card_name);
-      if (sortVal === 'price-hi') return (b.price || 0) - (a.price || 0);
-      if (sortVal === 'price-lo') return (a.price || 0) - (b.price || 0);
-      if (sortVal === 'qty')      return (b.qty || 1) - (a.qty || 1);
-      if (sortVal === 'recent')   return new Date(b.added_at) - new Date(a.added_at);
-      return 0;
-    });
-
-    if (!list) return;
-
-    if (!filtered.length) {
-      list.innerHTML = '';
-      if (empty) empty.classList.remove('hidden');
-    } else {
-      if (empty) empty.classList.add('hidden');
-      const totalValue = items.reduce((s, i) => s + (parseFloat(i.price) || 0) * (i.qty || 1), 0);
-      const totalQty   = items.reduce((s, i) => s + (i.qty || 1), 0);
-      if (stats) {
-        stats.classList.remove('hidden');
-        stats.innerHTML =
-          '<span class="inv-stat"><span class="inv-stat-label">Items</span><span class="inv-stat-value">' + items.length + '</span></span>' +
-          '<span class="inv-stat"><span class="inv-stat-label">Total cards</span><span class="inv-stat-value">' + totalQty + '</span></span>' +
-          '<span class="inv-stat"><span class="inv-stat-label">Est. value</span><span class="inv-stat-value inv-stat-money">$' + totalValue.toFixed(2) + '</span></span>';
-      }
-      list.innerHTML = filtered.map(item => {
-        const price  = item.price ? '$' + parseFloat(item.price).toFixed(2) : '—';
-        const foil   = item.foil ? ' <span class="inv-foil-badge">✨ Foil</span>' : '';
-        const ownerBtns = (typeof isOwner !== 'undefined' && isOwner())
-          ? '<button class="btn btn-ghost btn-xs" data-inv-action="edit" data-inv-id="' + item.id + '">Edit</button>' +
-            '<button class="btn btn-ghost btn-xs" data-inv-action="delete" data-inv-id="' + item.id + '">✕</button>'
-          : '';
-        return '<div class="inv-row" data-inv-id="' + item.id + '">' +
-          (item.image_uri ? '<img class="inv-card-img" src="' + Render.escapeHtml(item.image_uri) + '" alt="" loading="lazy">' : '<div class="inv-card-img inv-no-img"></div>') +
-          '<div class="inv-row-body">' +
-            '<div class="inv-row-name">' + Render.escapeHtml(item.card_name) + foil + '</div>' +
-            '<div class="inv-row-meta">' +
-              '<span class="inv-cond-badge inv-cond-' + item.condition + '">' + Render.escapeHtml(item.condition || 'NM') + '</span>' +
-              '<span class="inv-qty">×' + (item.qty || 1) + '</span>' +
-              '<span class="inv-price">' + price + '</span>' +
-            '</div>' +
-          '</div>' +
-          '<div class="inv-row-actions">' + ownerBtns + '</div>' +
-        '</div>';
-      }).join('');
-    }
-
-    // Wire filter/sort
-    document.getElementById('inv-filter')?.addEventListener('input', () => renderInventoryTab());
-    document.getElementById('inv-sort')?.addEventListener('change', () => renderInventoryTab());
-
-    // Fetch latest from Supabase if configured
-    if (typeof fetchInventory !== 'undefined') {
-      fetchInventory().then(() => renderInventoryTab());
-    }
-  }
-
-  function wireInventoryTab() {
-    // Add card button
-    document.getElementById('inv-add-btn')?.addEventListener('click', () => {
-      document.getElementById('inv-add-form')?.classList.remove('hidden');
-      document.getElementById('inv-card-search')?.focus();
-    });
-    document.getElementById('inv-cancel-btn')?.addEventListener('click', () => {
-      document.getElementById('inv-add-form')?.classList.add('hidden');
-      resetInvForm();
-    });
-
-    // Card search autocomplete
-    const invSearch = document.getElementById('inv-card-search');
-    const invSugg   = document.getElementById('inv-card-suggestions');
-    if (invSearch && invSugg) {
-      invSearch.addEventListener('input', () => {
-        clearTimeout(invSearchTimeout);
-        const q = invSearch.value.trim();
-        if (q.length < 2) { invSugg.innerHTML = ''; return; }
-        invSearchTimeout = setTimeout(async () => {
-          try {
-            const ac = await Scryfall.autocomplete(q);
-            invSugg.innerHTML = (ac.data || []).slice(0, 8).map(name =>
-              '<li data-name="' + Render.escapeHtml(name) + '">' + Render.escapeHtml(name) + '</li>'
-            ).join('');
-          } catch {}
-        }, 300);
-      });
-      invSugg.addEventListener('click', e => {
-        const li = e.target.closest('li[data-name]');
-        if (!li) return;
-        invSearch.value = li.dataset.name;
-        invSugg.innerHTML = '';
-      });
-    }
-
-    // Save new item
-    document.getElementById('inv-save-btn')?.addEventListener('click', async () => {
-      const name  = document.getElementById('inv-card-search')?.value.trim();
-      const qty   = parseInt(document.getElementById('inv-qty')?.value || '1');
-      const price = parseFloat(document.getElementById('inv-price')?.value || '0') || null;
-      const cond  = document.getElementById('inv-condition')?.value || 'NM';
-      const foil  = document.getElementById('inv-foil')?.checked || false;
-      if (!name) { toast('Enter a card name.', true); return; }
-      try {
-        // Fetch image from Scryfall
-        let imageUri = null;
-        try {
-          const card = await Scryfall.named(name);
-          imageUri = card.image_uris?.small || card.card_faces?.[0]?.image_uris?.small || null;
-        } catch {}
-        await addInventoryItem({ card_name: name, qty, price, condition: cond, foil, image_uri: imageUri });
-        document.getElementById('inv-add-form')?.classList.add('hidden');
-        resetInvForm();
-        renderInventoryTab();
-        toast('Added ' + name + ' to inventory.');
-      } catch (e) {
-        toast('Error: ' + e.message, true);
-      }
-    });
-
-    // Delete / edit delegation
-    document.getElementById('inv-list')?.addEventListener('click', async e => {
-      const btn = e.target.closest('[data-inv-action]');
-      if (!btn) return;
-      const id = parseInt(btn.dataset.invId);
-      if (btn.dataset.invAction === 'delete') {
-        if (!confirm('Remove this card from inventory?')) return;
-        try { await deleteInventoryItem(id); renderInventoryTab(); toast('Removed from inventory.'); } catch (err) { toast(err.message, true); }
-      }
-    });
-
-    // Export CSV
-    document.getElementById('inv-export-btn')?.addEventListener('click', () => {
-      const rows = ['Card Name,Qty,Price,Condition,Foil,Added'];
-      inventoryCache.forEach(i => {
-        rows.push([
-          '"' + i.card_name.replace(/"/g,'""') + '"',
-          i.qty || 1,
-          i.price || '',
-          i.condition || 'NM',
-          i.foil ? 'Yes' : 'No',
-          new Date(i.added_at).toLocaleDateString()
-        ].join(','));
-      });
-      const blob = new Blob([rows.join('\n')], { type: 'text/csv' });
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = 'md-collectiblez-inventory.csv';
-      a.click();
-    });
-  }
-
-  function resetInvForm() {
-    const f = (id) => document.getElementById(id);
-    if (f('inv-card-search')) f('inv-card-search').value = '';
-    if (f('inv-qty'))         f('inv-qty').value = '1';
-    if (f('inv-price'))       f('inv-price').value = '';
-    if (f('inv-condition'))   f('inv-condition').value = 'NM';
-    if (f('inv-foil'))        f('inv-foil').checked = false;
-    const sugg = f('inv-card-suggestions');
-    if (sugg) sugg.innerHTML = '';
-  }
 
   /* Wire inventory tab into wireEvents */
 
