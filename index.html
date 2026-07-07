@@ -1649,6 +1649,28 @@ select { cursor: pointer; }
 .sim-disclaimer { font-size:.68rem; color:var(--text-faint); font-style:italic; text-align:center; margin-top:1rem; border-top:1px solid var(--border); padding-top:.75rem; }
 .sim-perf { text-align:right; font-family:var(--font-mono); font-size:.68rem; color:var(--text-faint); margin-top:.5rem; }
 
+/* ── Sim AI Advice Section ───────────────────────────────────────── */
+.sim-ai-loading {
+  display: flex; align-items: center; gap: .75rem;
+  padding: 1rem 0; color: var(--text-dim); font-size: .9rem;
+  border-top: 1px solid var(--border); margin-top: 1rem;
+}
+.sim-ai-advice {
+  border-top: 2px solid var(--amber);
+  padding-top: 1.25rem; margin-top: 1.25rem;
+}
+.sim-ai-header {
+  font-family: var(--font-display); font-size: 1rem; font-weight: 700;
+  color: var(--amber-hi); letter-spacing: .06em;
+  margin-bottom: 1rem; display: flex; align-items: center; gap: 10px;
+}
+.sim-coll-note {
+  font-family: var(--font-mono); font-size: .68rem; font-weight: 600;
+  background: rgba(26,224,128,.12); border: 1px solid rgba(26,224,128,.3);
+  color: var(--success); border-radius: 5px; padding: 2px 8px;
+  letter-spacing: .04em;
+}
+
 </style>
 </head>
 <body>
@@ -6718,18 +6740,17 @@ ${sections}`;
     const deckCtx = deckContextString();
     if (!deckCtx) { toast('Build a deck first.', true); return; }
 
-    // Show response pane
     $('#coach-response-title').textContent = '🧪 Deck Testing';
     actionGrid.classList.add('hidden');
     res.classList.remove('hidden');
     $('#coach-output').classList.add('hidden');
     $('#coach-chat-wrap').classList.add('hidden');
     const loadingEl = $('#coach-loading');
+    const loadingText = $('#coach-loading-text');
     loadingEl.classList.remove('hidden');
-    $('#coach-loading-text').textContent = 'Running 800 simulated games…';
+    loadingText.textContent = 'Running 800 simulated games…';
 
-    // Run sim (synchronous but fast)
-    await new Promise(r => setTimeout(r, 30)); // yield to let loading render
+    await new Promise(r => setTimeout(r, 30));
     const t0 = performance.now();
     const data = runSimulations(800);
     const elapsed = performance.now() - t0;
@@ -6742,450 +6763,83 @@ ${sections}`;
       return;
     }
 
-    const html = renderSimResults(data);
-    output.innerHTML = html + `<p class="sim-perf">⚡ \${data.n} games in \${elapsed.toFixed(0)}ms</p>`;
+    output.innerHTML = renderSimResults(data)
+      + '<p class="sim-perf">⚡ ' + data.n + ' games in ' + elapsed.toFixed(0) + 'ms</p>'
+      + '<div class="sim-ai-loading" id="sim-ai-loading"><div class="coach-spinner"></div><span>Generating AI recommendations…</span></div>'
+      + '<div class="sim-ai-advice hidden" id="sim-ai-advice"></div>';
     output.classList.remove('hidden');
 
-    // Wire "ask AI about results" in the chat
-    coachHistory = [{
-      role: 'user',
-      content: `I just ran a \${data.n}-game deck simulation on this Commander deck:\n\${deckCtx}\n\nKey results: Win rate \${Math.round(data.winRate*100)}%, median win turn T\${Math.round(data.medWinTurn)}, mulligan rate \${Math.round((1-data.keep7)*100)}%. Mana screw \${Math.round(data.manaScrew*100)}%. Top card: \${data.topCards[0]?.[0]||'N/A'}. Please be ready to answer questions about how to improve this deck based on these results.`
-    }, {
-      role: 'assistant',
-      content: `I've reviewed your simulation data. Win rate of \${Math.round(data.winRate*100)}% with a median win turn of T\${Math.round(data.medWinTurn)} — ask me anything about improving the deck based on these numbers.`
-    }];
-    coachCurrentMode = 'analysis';
-    $('#coach-chat-wrap').classList.remove('hidden');
-  }
+    // Collection context
+    const ownedCards = [...state.collection];
+    const collCtx = ownedCards.length
+      ? '\n\nCARDS THE PLAYER OWNS (' + ownedCards.length + ' cards):\n' + ownedCards.slice(0, 120).join(', ') + (ownedCards.length > 120 ? ' ...and ' + (ownedCards.length - 120) + ' more' : '')
+      : '\n\nCOLLECTION: Not set up yet.';
 
+    const topStr    = data.topCards.slice(0, 6).map(([n, v]) => n + ' (' + Math.round(v.winRate * 100) + '%)').join(', ');
+    const bottomStr = data.bottomCards.slice(0, 6).map(([n, v]) => n + ' (' + Math.round(v.winRate * 100) + '%)').join(', ');
+    const rolesStr  = Object.entries(data.roleCount).filter(([, v]) => v > 0).map(([k, v]) => k + ':' + v).join(' | ');
 
+    const simSummary = 'SIMULATION RESULTS (' + data.n + ' games):\n'
+      + '- Win rate: ' + Math.round(data.winRate * 100) + '% (25% = average in 4-player pod)\n'
+      + '- Median win turn: T' + Math.round(data.medWinTurn) + ' | Average: T' + data.avgWinTurn.toFixed(1) + '\n'
+      + '- Mulligan rate: ' + Math.round((1 - data.keep7) * 100) + '% need to mulligan\n'
+      + '- Mana screw: ' + Math.round(data.manaScrew * 100) + '% | Flood: ' + Math.round(data.manaFlood * 100) + '%\n'
+      + '- Commander by T4: ' + Math.round(data.cmdrByT4 * 100) + '% | Ramp by T4: ' + Math.round(data.rampByT4 * 100) + '%\n'
+      + '- Draw engine by T5: ' + Math.round(data.drawByT5 * 100) + '%\n'
+      + 'DECK ROLES: ' + rolesStr + '\n'
+      + 'TOP CARDS: ' + topStr + '\n'
+      + 'BOTTOM CARDS (cut candidates): ' + bottomStr;
 
-  async function callCoachAI(messages) {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-6',
-        max_tokens: 2000,
-        system: messages.system,
-        messages: messages.history,
-      }),
-    });
-    if (!response.ok) {
-      const err = await response.json().catch(() => ({}));
-      throw new Error(err.error?.message || `API error ${response.status}`);
-    }
-    const data = await response.json();
-    return data.content?.[0]?.text || '';
-  }
+    const ownedFlag = ownedCards.length ? ' Flag with checkmark if the player already owns the replacement (check CARDS THE PLAYER OWNS list).' : '';
+    const manaNote  = data.manaScrew > 0.15
+      ? 'Mana screw is HIGH (' + Math.round(data.manaScrew * 100) + '%) - name specific lands or ramp to add.'
+      : data.manaFlood > 0.12
+        ? 'Mana flood is a problem - suggest specific cuts.'
+        : 'Mana base looks healthy. One or two fine-tune suggestions.';
 
-  function coachMarkdown(text) {
-    // Very simple markdown → HTML for the response area
-    return text
-      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-      .replace(/\*(.+?)\*/g, '<em>$1</em>')
-      .replace(/^#{1,3}\s+(.+)$/gm, '<h3 class="coach-h3">$1</h3>')
-      .replace(/^---+$/gm, '<hr class="coach-hr">')
-      .replace(/\n\n/g, '</p><p>')
-      .replace(/\n/g, '<br>')
-      .replace(/^/, '<p>').replace(/$/, '</p>');
-  }
+    const aiPrompt = 'You are an expert MTG Commander deck advisor reviewing simulation results.\n\n'
+      + deckCtx + '\n\n' + simSummary + collCtx
+      + '\n\nGive specific, actionable advice:\n\n'
+      + '## Simulation Verdict\n2-3 sentences on what these numbers reveal.\n\n'
+      + '## Immediate Cuts\nFor the bottom 4-5 underperforming cards: explain why the simulation flagged each, then give a SPECIFIC replacement card.' + ownedFlag + '\n\n'
+      + '## Priority Upgrades\n5-6 specific cards to add that address the weakest metrics. For each: card name, why it fixes the specific problem found' + (ownedCards.length ? ', checkmark if already owned' : ', rough price') + '.\n\n'
+      + '## Mana Base Fix\n' + manaNote + '\n\n'
+      + '## Quick Wins Under $5\n3 changes costing under $5 total. Use actual card names.\n\nBe specific - say "add Arcane Signet" not "add more ramp."';
 
-  function showCoachResponse(title) {
-    $('#coach-actions').classList.add('hidden');
-    const wrap = $('#coach-response-wrap');
-    wrap.classList.remove('hidden');
-    if ($('#coach-response-title')) $('#coach-response-title').textContent = title;
-    if ($('#coach-loading')) $('#coach-loading').classList.remove('hidden');
-    if ($('#coach-output')) $('#coach-output').classList.add('hidden');
-    if ($('#coach-chat-wrap')) $('#coach-chat-wrap').classList.add('hidden');
-    if ($('#coach-chat-history')) $('#coach-chat-history').innerHTML = '';
-  }
-
-  function showCoachOutput(html) {
-    const loading = $('#coach-loading'); if (loading) loading.classList.add('hidden');
-    const output = $('#coach-output');
-    if (output) { output.innerHTML = html; output.classList.remove('hidden'); }
-    const chatWrap = $('#coach-chat-wrap'); if (chatWrap) chatWrap.classList.remove('hidden');
-    const chatInput = $('#coach-chat-input'); if (chatInput) chatInput.focus();
-  }
-
-  function appendChatBubble(role, text) {
-    const history = $('#coach-chat-history');
-    if (!history) return;
-    const div = document.createElement('div');
-    div.className = 'coach-bubble coach-bubble-' + role;
-    div.innerHTML = coachMarkdown(text);
-    history.appendChild(div);
-    history.scrollTop = history.scrollHeight;
-  }
-
-  async function runCoachAction(mode) {
-    const ctx = deckContextString();
-    if (!ctx) { toast('Build or load a deck first.', true); return; }
-    const config = COACH_PROMPTS[mode];
-    if (!config) return;
-    coachCurrentMode = mode;
-    coachHistory = [];
-    showCoachResponse(config.title);
-    if ($('#coach-loading-text')) $('#coach-loading-text').textContent = config.loading;
     try {
-      const userMsg = config.user(ctx);
-      coachHistory.push({ role: 'user', content: userMsg });
-      const reply = await callCoachAI({ system: config.system, history: coachHistory });
-      coachHistory.push({ role: 'assistant', content: reply });
-      showCoachOutput(coachMarkdown(reply));
-    } catch (e) {
-      showCoachOutput(`<p class="error-text">Coach unavailable: ${Render.escapeHtml(e.message)}</p>`);
-    }
-  }
-
-  async function sendCoachChat() {
-    const input = $('#coach-chat-input');
-    const msg = input?.value?.trim();
-    if (!msg || !coachHistory.length) return;
-    input.value = '';
-    input.disabled = true;
-    const sendBtn = $('#coach-chat-send');
-    if (sendBtn) sendBtn.disabled = true;
-    appendChatBubble('user', msg);
-    const thinkDiv = document.createElement('div');
-    thinkDiv.className = 'coach-bubble coach-bubble-assistant coach-thinking';
-    thinkDiv.textContent = '…';
-    $('#coach-chat-history').appendChild(thinkDiv);
-    try {
-      coachHistory.push({ role: 'user', content: msg });
-      const config = COACH_PROMPTS[coachCurrentMode] || { system: 'You are a Commander expert.' };
-      const reply = await callCoachAI({ system: config.system, history: coachHistory });
-      coachHistory.push({ role: 'assistant', content: reply });
-      thinkDiv.remove();
-      appendChatBubble('assistant', reply);
-    } catch (e) {
-      thinkDiv.remove();
-      appendChatBubble('assistant', '⚠️ Error: ' + e.message);
-    } finally {
-      if (input) input.disabled = false;
-      if (sendBtn) sendBtn.disabled = false;
-      if (input) input.focus();
-    }
-  }
-
-  function updateCoachDeckBadge() {
-    const badge = $('#coach-deck-badge');
-    const label = $('#coach-deck-context-label');
-    const btns = document.querySelectorAll('.coach-action-btn');
-    const hasDecky = state.commanders.length > 0 && state.deck.length > 0;
-    btns.forEach(b => b.disabled = !hasDecky);
-    if (!badge || !label) return;
-    if (hasDecky) {
-      badge.classList.remove('hidden');
-      badge.textContent = state.commanders.map(c => c.name).join(' + ');
-      label.textContent = 'Deck loaded. Choose a tool or ask a question.';
-    } else {
-      badge.classList.add('hidden');
-      label.textContent = 'Build or load a deck first, then use any tool below.';
-    }
-  }
-
-  function wireCoachTab() {
-    // Action button clicks
-    document.querySelectorAll('.coach-action-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const mode = btn.dataset.coach;
-        if (mode === 'test') runDeckTest();
-        else if (mode) runCoachAction(mode);
+      loadingText.textContent = 'Analyzing results…';
+      loadingEl.classList.remove('hidden');
+      const reply = await callCoachAI({
+        system: 'You are an expert Magic: The Gathering Commander deck advisor. Give specific, actionable advice with real card names. Check if the player owns recommended cards and flag them clearly.',
+        history: [{ role: 'user', content: aiPrompt }],
       });
-    });
-    // Back button
-    $('#coach-back-btn')?.addEventListener('click', () => {
-      $('#coach-response-wrap').classList.add('hidden');
-      $('#coach-actions').classList.remove('hidden');
-      coachHistory = [];
-      coachCurrentMode = null;
-    });
-    // Chat send
-    $('#coach-chat-send')?.addEventListener('click', sendCoachChat);
-    $('#coach-chat-input')?.addEventListener('keydown', e => {
-      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendCoachChat(); }
-    });
-  }
-
-
-  /* ================================================================
-     BUY OPTIONS WATERFALL — tiered dropdown on every Buy button
-  ================================================================ */
-  let buyDropdown = null;
-
-  function openBuyOptions(card, triggerEl) {
-    closeBuyDropdown();
-    const options = (typeof buyOptions === 'function')
-      ? buyOptions(card.name, card.legalities?.alchemy === 'legal' || card.legalities?.arena === 'legal')
-      : [{ label: 'TCGPlayer', url: buildBuyLink(card.name), variant: 'buy-option-tcg' }];
-
-    const menu = document.createElement('div');
-    menu.className = 'buy-dropdown';
-    menu.setAttribute('role', 'menu');
-
-    const title = document.createElement('div');
-    title.className = 'buy-dropdown-title';
-    title.textContent = 'Buy ' + card.name;
-    menu.appendChild(title);
-
-    options.forEach(opt => {
-      const btn = document.createElement('a');
-      btn.className = 'buy-option ' + (opt.variant || '');
-      btn.href = opt.url;
-      btn.target = '_blank';
-      btn.rel = 'noopener';
-      btn.setAttribute('role', 'menuitem');
-      const labelWrap = document.createElement('div');
-      const nameEl = document.createElement('span');
-      nameEl.className = 'buy-option-name';
-      nameEl.textContent = opt.label;
-      labelWrap.appendChild(nameEl);
-      if (opt.sublabel) {
-        const sub = document.createElement('span');
-        sub.className = 'buy-option-sub';
-        sub.textContent = opt.sublabel;
-        labelWrap.appendChild(sub);
+      loadingEl.classList.add('hidden');
+      document.getElementById('sim-ai-loading')?.remove();
+      const adviceEl = document.getElementById('sim-ai-advice');
+      if (adviceEl) {
+        const collNote = ownedCards.length ? ' <span class="sim-coll-note">checkmark = you own it</span>' : '';
+        adviceEl.innerHTML = '<div class="sim-ai-header">AI Recommendations' + collNote + '</div>' + coachMarkdown(reply);
+        adviceEl.classList.remove('hidden');
       }
-      btn.appendChild(labelWrap);
-      const arrow = document.createElement('span');
-      arrow.className = 'buy-option-arrow';
-      arrow.textContent = '→';
-      btn.appendChild(arrow);
-      menu.appendChild(btn);
-    });
-
-    // Position below trigger button
-    document.body.appendChild(menu);
-    buyDropdown = menu;
-    const rect = triggerEl.getBoundingClientRect();
-    const menuH = menu.offsetHeight;
-    let top = rect.bottom + window.scrollY + 4;
-    let left = rect.left + window.scrollX;
-    if (left + 260 > window.innerWidth) left = window.innerWidth - 268;
-    if (top + menuH > window.scrollY + window.innerHeight) top = rect.top + window.scrollY - menuH - 4;
-    menu.style.top = top + 'px';
-    menu.style.left = left + 'px';
-
-    // Close on outside click
-    setTimeout(() => {
-      document.addEventListener('click', closeBuyDropdown, { once: true });
-    }, 10);
-  }
-
-  function closeBuyDropdown() {
-    if (buyDropdown) { buyDropdown.remove(); buyDropdown = null; }
-  }
-
-  /* ================================================================
-     INVENTORY TAB
-  ================================================================ */
-
-  /* Wire inventory tab into wireEvents */
-
-
-  /* ================================================================
-     CARD DETAIL MODAL — click any card tile art or name to open
-  ================================================================ */
-
-  let cdmFlipState = 0;   // 0 = front, 1 = back
-  let cdmCurrentCard = null;
-
-  function openCardDetail(card) {
-    if (!card) return;
-    cdmCurrentCard = card;
-    cdmFlipState = 0;
-    const modal = $('#card-detail-modal');
-    if (!modal) return;
-
-    populateCardDetail(card, 0);
-    modal.classList.remove('hidden');
-
-    // Close on backdrop click
-    modal.onclick = (e) => { if (e.target === modal) closeCardDetail(); };
-  }
-
-  function closeCardDetail() {
-    $('#card-detail-modal')?.classList.add('hidden');
-    cdmCurrentCard = null;
-  }
-
-  function populateCardDetail(card, face) {
-    // Handle double-faced cards
-    const faces  = card.card_faces;
-    const isMDFC = faces && faces.length >= 2;
-    const data   = isMDFC ? faces[face] : card;
-
-    // Art
-    const imgEl   = $('#cdm-img');
-    const skelEl  = $('#cdm-img-skeleton');
-    const imgUrl  = data.image_uris?.normal
-      || data.image_uris?.large
-      || card.image_uris?.normal
-      || card.image_uris?.large
-      || '';
-    if (imgEl) {
-      imgEl.style.opacity = '0';
-      if (skelEl) skelEl.style.display = 'block';
-      imgEl.onload = () => {
-        imgEl.style.opacity = '1';
-        if (skelEl) skelEl.style.display = 'none';
-      };
-      imgEl.onerror = () => { if (skelEl) skelEl.style.display = 'none'; imgEl.style.opacity = '1'; };
-      imgEl.src  = imgUrl;
-      imgEl.alt  = card.name;
-    }
-
-    // Flip button
-    const flipWrap = $('#cdm-flip-btn-wrap');
-    if (flipWrap) flipWrap.classList.toggle('hidden', !isMDFC);
-
-    // Name + cost
-    const nameEl = $('#cdm-name');
-    const costEl = $('#cdm-cost');
-    if (nameEl) nameEl.textContent = card.name;
-    if (costEl) costEl.innerHTML   = Render.manaCost(data.mana_cost || card.mana_cost || '');
-
-    // Type line
-    const typeEl = $('#cdm-type');
-    if (typeEl) typeEl.textContent = data.type_line || card.type_line || '';
-
-    // Oracle text — render mana symbols inline
-    const oracleEl = $('#cdm-oracle');
-    if (oracleEl) {
-      const raw = (data.oracle_text || card.oracle_text || '');
-      oracleEl.innerHTML = raw
-        .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
-        .replace(/\{([^}]+)\}/g, (_, sym) => {
-          const s = document.createElement('span');
-          s.className = 'mana-symbol-fallback';
-          s.textContent = sym;
-          return s.outerHTML;
-        })
-        .replace(/\n/g, '<br>');
-    }
-
-    // Flavor text
-    const flavorEl = $('#cdm-flavor');
-    if (flavorEl) {
-      const ft = data.flavor_text || card.flavor_text || '';
-      flavorEl.textContent = ft;
-      flavorEl.classList.toggle('hidden', !ft);
-    }
-
-    // P/T or Loyalty
-    const ptEl = $('#cdm-pt');
-    if (ptEl) {
-      let pt = '';
-      if (data.power != null)   pt = `${data.power} / ${data.toughness}`;
-      if (data.loyalty != null) pt = `Loyalty: ${data.loyalty}`;
-      ptEl.textContent = pt;
-      ptEl.classList.toggle('hidden', !pt);
-    }
-
-    // Meta row
-    const setEl    = $('#cdm-set');
-    const rarityEl = $('#cdm-rarity');
-    const priceEl  = $('#cdm-price');
-    const cmcEl    = $('#cdm-cmc');
-    if (setEl)    setEl.textContent    = `${card.set_name || ''} (${(card.set || '').toUpperCase()})`;
-    if (rarityEl) rarityEl.textContent = card.rarity ? card.rarity.charAt(0).toUpperCase() + card.rarity.slice(1) : '';
-    if (priceEl) {
-      const usd = parseFloat(card.prices?.usd || '0');
-      priceEl.textContent = usd > 0 ? `$${usd.toFixed(2)}` : '—';
-      priceEl.className   = 'cdm-meta-val cdm-price-val' + (usd > 20 ? ' cdm-price-hi' : usd > 5 ? ' cdm-price-mid' : '');
-    }
-    if (cmcEl) cmcEl.textContent = card.cmc != null ? card.cmc : '';
-
-    // Legality pills
-    const legEl = $('#cdm-legality');
-    if (legEl) {
-      const formats = ['commander','pioneer','modern','standard','legacy','vintage'];
-      const leg     = card.legalities || {};
-      legEl.innerHTML = formats.map(f => {
-        const status = leg[f] || 'not_legal';
-        const label  = f.charAt(0).toUpperCase() + f.slice(1);
-        const cls    = status === 'legal' ? 'cdm-leg-legal' : status === 'banned' ? 'cdm-leg-banned' : 'cdm-leg-not';
-        return `<span class="cdm-leg-pill ${cls}">${label}</span>`;
-      }).join('');
-    }
-
-    // Action buttons
-    const actEl = $('#cdm-actions');
-    if (actEl) {
-      const inDeck   = state.deck.some(e => e.card.id === card.id);
-      const inColl   = state.collection.has(card.name.toLowerCase());
-      actEl.innerHTML =
-        `<button class="btn btn-primary" data-action="cdm-add-deck" data-id="${Render.escapeHtml(card.id)}">${inDeck ? '✓ In deck' : '+ Add to deck'}</button>` +
-        `<button class="btn btn-secondary" data-action="cdm-buy" data-id="${Render.escapeHtml(card.id)}">Buy</button>` +
-        (inColl ? '' : `<button class="btn btn-ghost" data-action="cdm-add-coll" data-id="${Render.escapeHtml(card.id)}">+ Collection</button>`);
-    }
-
-    // Buy options section (show store badge if in inventory)
-    const buyEl = $('#cdm-buy-section');
-    if (buyEl) {
-      const inv = (typeof inventoryHas !== 'undefined') ? inventoryHas(card.name) : null;
-      if (inv && inv.qty > 0) {
-        buyEl.innerHTML =
-          `<div class="cdm-store-badge">` +
-          `<span class="cdm-store-label">🟢 In stock — MD Collectiblez</span>` +
-          `<span class="cdm-store-meta">${inv.qty} × ${inv.condition}${inv.foil ? ' ✨' : ''} ${inv.price ? '— $' + parseFloat(inv.price).toFixed(2) : ''}</span>` +
-          `</div>`;
-      } else {
-        buyEl.innerHTML = '';
+      coachHistory = [{ role: 'user', content: aiPrompt }, { role: 'assistant', content: reply }];
+      coachCurrentMode = 'analysis';
+      const ci = $('#coach-chat-input');
+      if (ci) ci.placeholder = 'Ask about specific cuts, replacements, budget alternatives…';
+      $('#coach-chat-wrap').classList.remove('hidden');
+    } catch (e) {
+      loadingEl.classList.add('hidden');
+      document.getElementById('sim-ai-loading')?.remove();
+      const adviceEl = document.getElementById('sim-ai-advice');
+      if (adviceEl) {
+        adviceEl.innerHTML = '<p class="error-text">AI analysis unavailable: ' + Render.escapeHtml(e.message) + '</p><p class="dim small">Simulation data loaded - ask questions in the chat below.</p>';
+        adviceEl.classList.remove('hidden');
       }
+      coachHistory = [{ role: 'user', content: 'Deck sim:\n' + simSummary + '\n' + deckCtx + collCtx }];
+      coachCurrentMode = 'analysis';
+      $('#coach-chat-wrap').classList.remove('hidden');
     }
   }
 
-  function wireCardDetailModal() {
-    // Close button
-    $('#cdm-close')?.addEventListener('click', closeCardDetail);
-    // Escape key
-    document.addEventListener('keydown', e => { if (e.key === 'Escape') closeCardDetail(); });
-
-    // Flip button
-    $('#cdm-flip-btn')?.addEventListener('click', () => {
-      if (!cdmCurrentCard?.card_faces) return;
-      cdmFlipState = cdmFlipState === 0 ? 1 : 0;
-      populateCardDetail(cdmCurrentCard, cdmFlipState);
-    });
-
-    // Action buttons inside the modal
-    $('#cdm-actions')?.addEventListener('click', e => {
-      const btn  = e.target.closest('[data-action]');
-      if (!btn) return;
-      const id   = btn.dataset.id;
-      const card = id ? state.cardCache.get(id) : null;
-      if (!card) return;
-      switch (btn.dataset.action) {
-        case 'cdm-add-deck':
-          addToDeck(card);
-          populateCardDetail(card, cdmFlipState); // refresh In deck state
-          break;
-        case 'cdm-buy':
-          openBuyOptions(card, btn);
-          break;
-        case 'cdm-add-coll':
-          fetchAndAddToCollection(card.name).then(() => populateCardDetail(card, cdmFlipState));
-          break;
-      }
-    });
-
-    // Click on any card tile — open detail on image or name click, not buttons
-    document.body.addEventListener('click', e => {
-      // Don't fire if clicking a button, link, or interactive control
-      if (e.target.closest('button, a, select, input, [data-action]')) return;
-      const tile = e.target.closest('.card-tile, .rec-card');
-      if (!tile) return;
-      const id   = tile.dataset.id;
-      if (!id) return;
-      const card = state.cardCache.get(id);
-      if (card) openCardDetail(card);
-    });
-  }
 
   document.addEventListener('DOMContentLoaded', init);
 })();
