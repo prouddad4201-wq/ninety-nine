@@ -4488,6 +4488,9 @@ const Render = (() => {
     'Archon','Avatar','Nightmare','Specter','Shade','Wraith',
     // Horror/Phyrexian/God have niche but real tribal support
     'Horror','Phyrexian','God',
+    // Universes Beyond / Marvel-era creature types (real type-line subtypes)
+    'Hero','Villain','Symbiote','Robot','Mutant','Scientist',
+    'Detective','Alien','Astartes','Tyranid','Necron','Toy',
   ];
 
   /**
@@ -4497,12 +4500,27 @@ const Render = (() => {
   function commanderCreatureTypes(commanders) {
     const types = [];
     commanders.forEach(c => {
-      const tl = (c.type_line || '').replace(/.*—\s*/, '');
-      KNOWN_TRIBES.forEach(tribe => {
-        if (new RegExp('\\b' + tribe + '\\b', 'i').test(tl)) types.push(tribe);
+      // Collect subtypes from ALL faces. type_line for MDFC is
+      // "Legendary Creature — X Y // Legendary Creature — Z" — split on //
+      // then take everything after the em-dash on each face (non-greedy).
+      const faces = (c.type_line || '').split('//');
+      faces.forEach(face => {
+        const idx = face.indexOf('—');
+        const tl  = idx >= 0 ? face.slice(idx + 1) : face;
+        KNOWN_TRIBES.forEach(tribe => {
+          if (new RegExp('\\b' + tribe + '\\b', 'i').test(tl)) types.push(tribe);
+        });
       });
     });
-    return [...new Set(types)];
+    const unique = [...new Set(types)];
+    // 'Human' appears on nearly every Universes Beyond commander alongside more
+    // specific types (Spider Human Hero, Human Villain). If anything more
+    // specific was detected, drop Human so the build doesn't flood with
+    // generic Humans and dilute the actual tribal theme.
+    if (unique.length > 1 && unique.includes('Human')) {
+      return unique.filter(t => t !== 'Human');
+    }
+    return unique;
   }
 
   /**
@@ -4675,17 +4693,31 @@ const Render = (() => {
             satyr: 'satyrs', naga: 'nagas', insect: 'insects',
             bat: 'bats', bear: 'bears', myr: 'myr', fungus: 'fungi',
             mouse: 'mice', elf: 'elves', ox: 'oxen', sphinx: 'sphinxes',
+            hero: 'heroes', villain: 'villains', symbiote: 'symbiotes',
+            robot: 'robots', mutant: 'mutants', scientist: 'scientists',
+            detective: 'detectives', alien: 'aliens', toy: 'toys',
           };
+
+          // Tribes where most creatures are LEGENDARY (Marvel Heroes/Villains,
+          // Gods, Praetor-likes). Excluding legendaries from the bulk query
+          // would return almost nothing, so flip the cap weighting for these.
+          const MOSTLY_LEGENDARY = new Set(['hero', 'villain', 'god']);
 
           tribes.forEach(tribe => {
             const t  = tribe.toLowerCase();
             const tp = PLURAL_MAP[t] || (t.endsWith('s') ? t : t + 's');
+            const legendHeavy = MOSTLY_LEGENDARY.has(t);
 
             // ── Creatures ──────────────────────────────────────────────────────
-            // Non-legendary creatures of the type (bulk of the tribe)
-            effectiveQueries.push({ q: `t:${t} t:creature -t:legendary`, cap: 24 });
-            // Legendary creatures of the type (tribal legends like Krenko, Marrow-Gnawer)
-            effectiveQueries.push({ q: `t:${t} t:legendary t:creature`, cap: 6 });
+            if (legendHeavy) {
+              // Bulk of the tribe IS legendary (Marvel sets) — don't exclude them
+              effectiveQueries.push({ q: `t:${t} t:creature`, cap: 26 });
+            } else {
+              // Non-legendary creatures of the type (bulk of the tribe)
+              effectiveQueries.push({ q: `t:${t} t:creature -t:legendary`, cap: 24 });
+              // Legendary creatures of the type (tribal legends like Krenko)
+              effectiveQueries.push({ q: `t:${t} t:legendary t:creature`, cap: 6 });
+            }
 
             // ── Lords & anthems ─────────────────────────────────────────────────
             // +1/+1 anthem lords ("Other Elves you control get +1/+1")
@@ -5487,7 +5519,7 @@ const Render = (() => {
       if (e.name === 'NotReadableError') msg = 'Camera in use by another app — close it and try again.';
       if (status) status.textContent = '';
       $('#scan-result').innerHTML =
-        `<p class="error-text">\${Render.escapeHtml(msg)}</p>
+        `<p class="error-text">${Render.escapeHtml(msg)}</p>
          <p class="dim small" style="margin-top:.4rem">Use the <strong>Scan from photo</strong> button below.</p>`;
     }
   }
@@ -5552,17 +5584,14 @@ const Render = (() => {
       }
       ctx.putImageData(id, 0, 0);
 
-      for (const psm of [3, 11]) {
-        try {
-          const { data: { text } } = await window.Tesseract.recognize(tmp, 'eng', {
-            tessedit_pageseg_mode: psm,
-          });
-          for (const line of text.split('\n')) {
-            const { score, text: clean } = scoreOcrLine(line.trim());
-            if (score > bestScore) { bestScore = score; bestText = clean; }
-          }
-        } catch (_) {}
-      }
+      try {
+        // Tesseract.js v5 — recognize() ignores PSM in options, so one pass per scale.
+        const { data: { text } } = await window.Tesseract.recognize(tmp, 'eng');
+        for (const line of text.split('\n')) {
+          const { score, text: clean } = scoreOcrLine(line.trim());
+          if (score > bestScore) { bestScore = score; bestText = clean; }
+        }
+      } catch (_) {}
       if (bestScore >= 12) break; // good enough, stop early
     }
 
@@ -5581,7 +5610,7 @@ const Render = (() => {
     }
 
     // ── Scryfall fuzzy lookup — handles OCR typos perfectly ──────────
-    res.innerHTML = `<p class="dim">Found: “\${Render.escapeHtml(bestText)}” — looking up…</p>`;
+    res.innerHTML = `<p class="dim">Found: “${Render.escapeHtml(bestText)}” — looking up…</p>`;
     let card = null;
 
     // 1. namedFuzzy — Scryfall's own typo-tolerant endpoint
@@ -5607,7 +5636,7 @@ const Render = (() => {
 
     if (!card) {
       res.innerHTML =
-        `<p class="error-text">No card matched “\${Render.escapeHtml(bestText)}”.</p>
+        `<p class="error-text">No card matched “${Render.escapeHtml(bestText)}”.</p>
          <p class="dim small" style="margin-top:.4rem">Try again with better lighting or use the Upload button.</p>`;
       scanBusy = false; return;
     }
@@ -5694,7 +5723,7 @@ const Render = (() => {
       c.getContext('2d').drawImage(img, 0, 0);
       await runOcr(c);
     } catch (e) {
-      res.innerHTML = `<p class="error-text">Could not read image: \${Render.escapeHtml(e.message)}</p>`;
+      res.innerHTML = `<p class="error-text">Could not read image: ${Render.escapeHtml(e.message)}</p>`;
       scanBusy = false;
     }
   }
@@ -5703,7 +5732,7 @@ const Render = (() => {
     await fetchAndAddToCollection(name);
     // Keep scan open so user can scan next card
     $('#scan-result').innerHTML =
-      `<p class="dim" style="color:var(--success)">✓ Added \${Render.escapeHtml(name)} to collection.</p>
+      `<p class="dim" style="color:var(--success)">✓ Added ${Render.escapeHtml(name)} to collection.</p>
        <p class="dim small" style="margin-top:.3rem">Scan another card or tap ✕ Close.</p>`;
     scanBusy = false;
   }
@@ -6706,7 +6735,7 @@ ${sections}`;
     const pct = n => Math.round(n * 100);
     const bar = (v, color, max=1) => {
       const w = Math.round(Math.min(v/max, 1) * 100);
-      return `<div class="sim-bar-track"><div class="sim-bar-fill" style="width:\${w}%;background:\${color}"></div></div>`;
+      return `<div class="sim-bar-track"><div class="sim-bar-fill" style="width:${w}%;background:${color}"></div></div>`;
     };
     const grade = wr => wr >= 0.65 ? ['A', 'var(--success)'] : wr >= 0.50 ? ['B', 'var(--success)'] :
       wr >= 0.38 ? ['C', 'var(--amber)'] : wr >= 0.28 ? ['D', 'var(--amber)'] : ['F', 'var(--danger)'];
@@ -6717,9 +6746,9 @@ ${sections}`;
     const turnBars = Array.from({length: 14}, (_, i) => i + 4).map(t => {
       const cnt = data.turnDist[t] || 0;
       const h = Math.round((cnt / maxTurnCount) * 60);
-      return `<div class="sim-turn-bar-wrap" title="Turn \${t}: \${cnt} wins">
-        <div class="sim-turn-bar" style="height:\${h}px;background:var(--amber)"></div>
-        <div class="sim-turn-bar-label">\${t}</div>
+      return `<div class="sim-turn-bar-wrap" title="Turn ${t}: ${cnt} wins">
+        <div class="sim-turn-bar" style="height:${h}px;background:var(--amber)"></div>
+        <div class="sim-turn-bar-label">${t}</div>
       </div>`;
     }).join('');
 
@@ -6728,17 +6757,17 @@ ${sections}`;
 
     // Top performer rows
     const topRows = data.topCards.map(([name, v]) =>
-      `<tr><td class="sim-td-name">\${Render.escapeHtml(name)}</td>
-      <td>\${bar(v.winRate, 'var(--success)')}</td>
-      <td class="sim-td-pct" style="color:var(--success)">\${pct(v.winRate)}%</td>
-      <td class="sim-td-app">\${v.appearances}</td></tr>`
+      `<tr><td class="sim-td-name">${Render.escapeHtml(name)}</td>
+      <td>${bar(v.winRate, 'var(--success)')}</td>
+      <td class="sim-td-pct" style="color:var(--success)">${pct(v.winRate)}%</td>
+      <td class="sim-td-app">${v.appearances}</td></tr>`
     ).join('');
 
     const bottomRows = data.bottomCards.map(([name, v]) =>
-      `<tr><td class="sim-td-name">\${Render.escapeHtml(name)}</td>
-      <td>\${bar(v.winRate, 'var(--danger)')}</td>
-      <td class="sim-td-pct" style="color:var(--danger)">\${pct(v.winRate)}%</td>
-      <td class="sim-td-app">\${v.appearances}</td></tr>`
+      `<tr><td class="sim-td-name">${Render.escapeHtml(name)}</td>
+      <td>${bar(v.winRate, 'var(--danger)')}</td>
+      <td class="sim-td-pct" style="color:var(--danger)">${pct(v.winRate)}%</td>
+      <td class="sim-td-app">${v.appearances}</td></tr>`
     ).join('');
 
     return `
@@ -6746,24 +6775,24 @@ ${sections}`;
 
   <div class="sim-header-row">
     <div class="sim-grade-block">
-      <div class="sim-grade" style="color:\${grColor}">\${grLetter}</div>
+      <div class="sim-grade" style="color:${grColor}">${grLetter}</div>
       <div class="sim-grade-label">Overall Grade</div>
     </div>
     <div class="sim-headline-stats">
       <div class="sim-stat-big">
-        <div class="sim-stat-num" style="color:\${data.winRate>=0.4?'var(--success)':'var(--danger)'}">\${pct(data.winRate)}%</div>
+        <div class="sim-stat-num" style="color:${data.winRate>=0.4?'var(--success)':'var(--danger)'}">${pct(data.winRate)}%</div>
         <div class="sim-stat-lbl">Win Rate</div>
       </div>
       <div class="sim-stat-big">
-        <div class="sim-stat-num">\${data.medWinTurn > 0 ? 'T' + Math.round(data.medWinTurn) : '—'}</div>
+        <div class="sim-stat-num">${data.medWinTurn > 0 ? 'T' + Math.round(data.medWinTurn) : '—'}</div>
         <div class="sim-stat-lbl">Median Win Turn</div>
       </div>
       <div class="sim-stat-big">
-        <div class="sim-stat-num">\${data.avgWinTurn > 0 ? 'T' + data.avgWinTurn.toFixed(1) : '—'}</div>
+        <div class="sim-stat-num">${data.avgWinTurn > 0 ? 'T' + data.avgWinTurn.toFixed(1) : '—'}</div>
         <div class="sim-stat-lbl">Avg Win Turn</div>
       </div>
       <div class="sim-stat-big">
-        <div class="sim-stat-num">\${data.n}</div>
+        <div class="sim-stat-num">${data.n}</div>
         <div class="sim-stat-lbl">Games Simulated</div>
       </div>
     </div>
@@ -6771,7 +6800,7 @@ ${sections}`;
 
   <div class="sim-section-title">Win Turn Distribution</div>
   <div class="sim-turn-chart">
-    \${turnBars}
+    ${turnBars}
   </div>
   <div class="sim-chart-note">Turn number across wins (T4–T17)</div>
 
@@ -6781,48 +6810,48 @@ ${sections}`;
       <div class="sim-card-title">Consistency</div>
       <div class="sim-metric-row">
         <span class="sim-metric-label">Commander cast by T4</span>
-        \${bar(data.cmdrByT4, 'var(--amber)')}
-        <span class="sim-metric-val">\${pct(data.cmdrByT4)}%</span>
+        ${bar(data.cmdrByT4, 'var(--amber)')}
+        <span class="sim-metric-val">${pct(data.cmdrByT4)}%</span>
       </div>
       <div class="sim-metric-row">
         <span class="sim-metric-label">Commander cast by T6</span>
-        \${bar(data.cmdrByT6, 'var(--amber)')}
-        <span class="sim-metric-val">\${pct(data.cmdrByT6)}%</span>
+        ${bar(data.cmdrByT6, 'var(--amber)')}
+        <span class="sim-metric-val">${pct(data.cmdrByT6)}%</span>
       </div>
       <div class="sim-metric-row">
         <span class="sim-metric-label">Ramp online by T4</span>
-        \${bar(data.rampByT4, '#3B82F6')}
-        <span class="sim-metric-val">\${pct(data.rampByT4)}%</span>
+        ${bar(data.rampByT4, '#3B82F6')}
+        <span class="sim-metric-val">${pct(data.rampByT4)}%</span>
       </div>
       <div class="sim-metric-row">
         <span class="sim-metric-label">Draw engine by T5</span>
-        \${bar(data.drawByT5, '#9040C8')}
-        <span class="sim-metric-val">\${pct(data.drawByT5)}%</span>
+        ${bar(data.drawByT5, '#9040C8')}
+        <span class="sim-metric-val">${pct(data.drawByT5)}%</span>
       </div>
-      \${data.comboGames > 0 ? '<div class="sim-metric-row"><span class="sim-metric-label">Combo lines present</span>' + bar(data.comboGames, 'var(--danger)') + '<span class="sim-metric-val">' + pct(data.comboGames) + '%</span></div>' : ''}
+      ${data.comboGames > 0 ? '<div class="sim-metric-row"><span class="sim-metric-label">Combo lines present</span>' + bar(data.comboGames, 'var(--danger)') + '<span class="sim-metric-val">' + pct(data.comboGames) + '%</span></div>' : ''}
     </div>
 
     <div class="sim-card">
       <div class="sim-card-title">Mulligan Data</div>
       <div class="sim-metric-row">
         <span class="sim-metric-label">Keep 7-card hand</span>
-        \${bar(data.keep7, 'var(--success)')}
-        <span class="sim-metric-val">\${pct(data.keep7)}%</span>
+        ${bar(data.keep7, 'var(--success)')}
+        <span class="sim-metric-val">${pct(data.keep7)}%</span>
       </div>
       <div class="sim-metric-row">
         <span class="sim-metric-label">Go to 6</span>
-        \${bar(data.keep6, 'var(--amber)')}
-        <span class="sim-metric-val">\${pct(data.keep6)}%</span>
+        ${bar(data.keep6, 'var(--amber)')}
+        <span class="sim-metric-val">${pct(data.keep6)}%</span>
       </div>
       <div class="sim-metric-row">
         <span class="sim-metric-label">Go to 5 or less</span>
-        \${bar(data.keep5, 'var(--danger)')}
-        <span class="sim-metric-val">\${pct(data.keep5)}%</span>
+        ${bar(data.keep5, 'var(--danger)')}
+        <span class="sim-metric-val">${pct(data.keep5)}%</span>
       </div>
       <div class="sim-metric-row">
         <span class="sim-metric-label">Avg mulligans/game</span>
-        <div class="sim-bar-track"><div class="sim-bar-fill" style="width:\${Math.min(data.avgMulls/3*100,100)}%;background:var(--amber)"></div></div>
-        <span class="sim-metric-val">\${data.avgMulls.toFixed(2)}</span>
+        <div class="sim-bar-track"><div class="sim-bar-fill" style="width:${Math.min(data.avgMulls/3*100,100)}%;background:var(--amber)"></div></div>
+        <span class="sim-metric-val">${data.avgMulls.toFixed(2)}</span>
       </div>
     </div>
 
@@ -6830,25 +6859,25 @@ ${sections}`;
       <div class="sim-card-title">Mana Analysis</div>
       <div class="sim-metric-row">
         <span class="sim-metric-label">Mana screw risk</span>
-        \${bar(data.manaScrew, 'var(--danger)')}
-        <span class="sim-metric-val \${data.manaScrew > 0.15 ? 'sim-warn' : ''}">\${pct(data.manaScrew)}%</span>
+        ${bar(data.manaScrew, 'var(--danger)')}
+        <span class="sim-metric-val ${data.manaScrew > 0.15 ? 'sim-warn' : ''}">${pct(data.manaScrew)}%</span>
       </div>
       <div class="sim-metric-row">
         <span class="sim-metric-label">Mana flood risk</span>
-        \${bar(data.manaFlood, 'var(--danger)')}
-        <span class="sim-metric-val \${data.manaFlood > 0.10 ? 'sim-warn' : ''}">\${pct(data.manaFlood)}%</span>
+        ${bar(data.manaFlood, 'var(--danger)')}
+        <span class="sim-metric-val ${data.manaFlood > 0.10 ? 'sim-warn' : ''}">${pct(data.manaFlood)}%</span>
       </div>
-      <div class="sim-substat">Avg lands played: \${data.avgLandsT.toFixed(1)} | Avg ramp pieces: \${data.avgRampT.toFixed(1)}</div>
+      <div class="sim-substat">Avg lands played: ${data.avgLandsT.toFixed(1)} | Avg ramp pieces: ${data.avgRampT.toFixed(1)}</div>
     </div>
 
     <div class="sim-card">
       <div class="sim-card-title">Win Conditions</div>
-      \${Object.entries(data.winConDist).map(([wc,cnt]) => '<div class="sim-metric-row"><span class="sim-metric-label">' + (winConLabels[wc]||wc) + '</span>' + bar(cnt/data.wins,'var(--blue,#3B82F6)') + '<span class="sim-metric-val">' + Math.round(cnt/data.wins*100) + '%</span></div>').join('')}
+      ${Object.entries(data.winConDist).map(([wc,cnt]) => '<div class="sim-metric-row"><span class="sim-metric-label">' + (winConLabels[wc]||wc) + '</span>' + bar(cnt/data.wins,'var(--blue,#3B82F6)') + '<span class="sim-metric-val">' + Math.round(cnt/data.wins*100) + '%</span></div>').join('')}
     </div>
 
     <div class="sim-card">
       <div class="sim-card-title">Deck Role Breakdown</div>
-      \${[['land','Lands','#8B6A3A'],['ramp','Ramp','#3B82F6'],['draw','Card Draw','#9040C8'],['removal','Removal','#E03020'],['wipe','Board Wipes','#FF6850'],['tutor','Tutors','var(--amber)'],['threat','Win Threats','var(--success)'],['combo','Combo Pieces','var(--danger)']].map(([role,lbl,col])=>data.roleCount[role]?'<div class="sim-metric-row"><span class="sim-metric-label">'+lbl+'</span>'+bar(data.roleCount[role]/99,col,1)+'<span class="sim-metric-val">'+data.roleCount[role]+'</span></div>':'').join('')}
+      ${[['land','Lands','#8B6A3A'],['ramp','Ramp','#3B82F6'],['draw','Card Draw','#9040C8'],['removal','Removal','#E03020'],['wipe','Board Wipes','#FF6850'],['tutor','Tutors','var(--amber)'],['threat','Win Threats','var(--success)'],['combo','Combo Pieces','var(--danger)']].map(([role,lbl,col])=>data.roleCount[role]?'<div class="sim-metric-row"><span class="sim-metric-label">'+lbl+'</span>'+bar(data.roleCount[role]/99,col,1)+'<span class="sim-metric-val">'+data.roleCount[role]+'</span></div>':'').join('')}
     </div>
 
   </div>
@@ -6857,7 +6886,7 @@ ${sections}`;
   <div class="sim-table-wrap">
     <table class="sim-table">
       <thead><tr><th>Card</th><th>Win Rate</th><th>%</th><th>Played</th></tr></thead>
-      <tbody>\${topRows}</tbody>
+      <tbody>${topRows}</tbody>
     </table>
   </div>
 
@@ -6865,13 +6894,13 @@ ${sections}`;
   <div class="sim-table-wrap">
     <table class="sim-table">
       <thead><tr><th>Card</th><th>Win Rate</th><th>%</th><th>Played</th></tr></thead>
-      <tbody>\${bottomRows}</tbody>
+      <tbody>${bottomRows}</tbody>
     </table>
   </div>
 
   <div class="sim-disclaimer">
-    Simulation accuracy: ±\${Math.round(1.96 * Math.sqrt(data.winRate*(1-data.winRate)/data.n) * 100)}% (95% CI) ·
-    \${data.n} games · opponents modeled as statistically calibrated pressure curves · win % reflects 4-player pod equity
+    Simulation accuracy: ±${Math.round(1.96 * Math.sqrt(data.winRate*(1-data.winRate)/data.n) * 100)}% (95% CI) ·
+    ${data.n} games · opponents modeled as statistically calibrated pressure curves · win % reflects 4-player pod equity
   </div>
 </div>`;
   }
