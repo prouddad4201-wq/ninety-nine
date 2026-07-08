@@ -2588,6 +2588,21 @@ function buyOptions(cardName, arenaLegal = false) {
 
 // ── Auth UI wiring ─────────────────────────────────────────────────
 function wireAuthUI() {
+  // Live cloud mirroring: once everything is loaded, wrap Store.set so every
+  // save (decks, collection, saved decks, prefs) also writes to Supabase when
+  // the customer is signed in — not just the one-time push at login. This is
+  // what makes a deck saved on the phone appear on the laptop.
+  if (typeof Store !== 'undefined' && !Store.__cloudWrapped) {
+    const _origSet = Store.set.bind(Store);
+    Store.set = async (key, value) => {
+      await _origSet(key, value);
+      if (currentUser && key.startsWith('mtgdb:')) {
+        CloudStore.set(key, value); // fire-and-forget — UI never waits on network
+      }
+    };
+    Store.__cloudWrapped = true;
+  }
+
   // Account button opens modal or shows user menu
   const accountBtn = document.getElementById('account-btn');
   if (accountBtn) {
@@ -2661,13 +2676,21 @@ function wireAuthUI() {
   document.getElementById('auth-modal')?.addEventListener('click', e => { if (e.target === document.getElementById('auth-modal')) closeAuthModal(); });
 
   // Auth state changes → update UI
+  let _lastUserId = null;
   onAuthChange(async (user) => {
     updateAccountLabel(user);
     if (user) {
+      const isNewLogin = user.id !== _lastUserId;
+      _lastUserId = user.id;
       // Pull cloud data down (merges with any local data)
       await CloudStore.pullAll();
       // Push any local-only data up (first login migration)
       await CloudStore.pushAll();
+      // Refresh in-memory app state from the freshly pulled data so the
+      // customer's decks/collection from other devices appear immediately.
+      if (isNewLogin && typeof window._reloadPersisted === 'function') {
+        window._reloadPersisted();
+      }
 
     }
   });
@@ -6249,6 +6272,17 @@ const Render = (() => {
   async function init() {
     // Expose buildBuyLink globally so auth.js waterfall can use it
     window._buildBuyLink = buildBuyLink;
+    // Called by auth.js after a fresh sign-in pulls cloud data — re-reads
+    // persisted state so decks/collection from other devices show up live.
+    window._reloadPersisted = async () => {
+      await loadPersisted();
+      renderCommanderPanel();
+      renderDeckTab();
+      if (typeof updateCoachDeckBadge === 'function') updateCoachDeckBadge();
+      if (state.activeTab === 'saved') renderSavedDecksTab();
+      if (state.activeTab === 'collection') renderCollectionTab();
+      toast('Synced your decks and collection from the cloud.');
+    };
     try { const sym = await Scryfall.symbology(); Render.setSymbology(sym); } catch (_) {}
     // Init auth (non-blocking — UI shows immediately, data syncs in background)
     if (typeof wireAuthUI !== 'undefined') wireAuthUI();
