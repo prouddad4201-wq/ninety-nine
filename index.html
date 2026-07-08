@@ -2567,23 +2567,10 @@ function ckLink(name) {
  */
 function buyOptions(cardName, arenaLegal = false) {
   const options = [];
-  const inv = inventoryHas(cardName);
+  // NOTE: MD Collectiblez direct-sale option is planned for a later update.
+  // For now the waterfall is TCGPlayer → Card Kingdom → Arena.
 
-  // 1. MD Collectiblez inventory — highest priority
-  if (inv && inv.qty > 0) {
-    const priceStr = inv.price ? ` — $${parseFloat(inv.price).toFixed(2)}` : '';
-    const condStr  = inv.condition && inv.condition !== 'NM' ? ` (${inv.condition})` : '';
-    const foilStr  = inv.foil ? ' ✨' : '';
-    options.push({
-      label:    `MD Collectiblez${priceStr}${condStr}${foilStr}`,
-      sublabel: `${inv.qty} in stock`,
-      url:      `mailto:jc@mdcollectiblez.com?subject=Buy inquiry: ${encodeURIComponent(cardName)}&body=Hi, I'm interested in purchasing ${encodeURIComponent(cardName)} from your inventory.`,
-      variant:  'buy-option-store',
-      priority: 1,
-    });
-  }
-
-  // 2. TCGPlayer (with affiliate wrapper if set)
+  // 1. TCGPlayer (with affiliate wrapper if set)
   const tcgUrl = window._buildBuyLink ? window._buildBuyLink(cardName)
     : TCG_BASE.replace('{QUERY}', encodeURIComponent(cardName));
   options.push({ label: 'TCGPlayer', url: tcgUrl, variant: 'buy-option-tcg', priority: 2 });
@@ -2681,8 +2668,7 @@ function wireAuthUI() {
       await CloudStore.pullAll();
       // Push any local-only data up (first login migration)
       await CloudStore.pushAll();
-      // Pre-fetch inventory so buy buttons are ready
-      await fetchInventory();
+
     }
   });
 }
@@ -2717,7 +2703,7 @@ function updateAccountLabel(user) {
   const btn    = document.getElementById('account-btn');
   if (!label || !btn) return;
   if (user) {
-    const display = user.email === SELLER_EMAIL ? '⚙ Store' : (user.email?.split('@')[0] || 'Account');
+    const display = user.email?.split('@')[0] || 'Account';
     label.textContent = display;
     btn.title = `Signed in as ${user.email} — click to sign out`;
     btn.classList.add('account-signed-in');
@@ -6075,12 +6061,7 @@ const Render = (() => {
         (inColl ? '' : `<button class="btn btn-ghost" data-action="cdm-add-coll" data-id="${Render.escapeHtml(card.id)}">+ Collection</button>`);
     }
     const buyEl = $('#cdm-buy-section');
-    if (buyEl) {
-      const inv = typeof inventoryHas !== 'undefined' ? inventoryHas(card.name) : null;
-      buyEl.innerHTML = (inv && inv.qty > 0)
-        ? `<div class="cdm-store-badge"><span class="cdm-store-label">\uD83D\uDFE2 In stock \u2014 MD Collectiblez</span><span class="cdm-store-meta">${inv.qty} \u00d7 ${inv.condition}${inv.foil ? ' \u2728' : ''}${inv.price ? ' \u2014 $' + parseFloat(inv.price).toFixed(2) : ''}</span></div>`
-        : '';
-    }
+    if (buyEl) buyEl.innerHTML = ''; // seller stock badge returns in a later update
   }
 
   function wireCardDetailModal() {
