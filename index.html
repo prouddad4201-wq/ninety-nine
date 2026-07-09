@@ -1671,6 +1671,32 @@ select { cursor: pointer; }
   letter-spacing: .04em;
 }
 
+/* ── Cloud sync diagnostics ─────────────────────────────────────── */
+.sync-test-section {
+  margin-top: 1.5rem; padding-top: 1.25rem;
+  border-top: 1px solid var(--border);
+}
+.sync-test-title {
+  font-family: var(--font-mono); font-size: .7rem; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .1em; color: var(--text-dim);
+  margin-bottom: .4rem;
+}
+.sync-test-results {
+  margin-top: .85rem; display: flex; flex-direction: column; gap: 6px;
+  background: var(--surface-3); border: 1px solid var(--border);
+  border-radius: 10px; padding: 12px 14px;
+}
+.sync-test-row { display: flex; align-items: baseline; gap: 8px; font-size: .82rem; flex-wrap: wrap; }
+.sync-test-icon { flex-shrink: 0; }
+.sync-test-label { color: var(--text); font-weight: 600; }
+.sync-test-detail { color: var(--text-faint); font-size: .72rem; font-family: var(--font-mono); }
+.sync-test-verdict {
+  margin-top: 6px; padding: 8px 12px; border-radius: 8px;
+  font-weight: 700; font-size: .85rem; text-align: center;
+}
+.sync-pass { background: rgba(26,224,128,.12); border: 1px solid rgba(26,224,128,.35); color: var(--success); }
+.sync-fail { background: rgba(240,48,48,.10); border: 1px solid rgba(240,48,48,.3); color: var(--danger); }
+
 </style>
 </head>
 <body>
@@ -2236,6 +2262,14 @@ select { cursor: pointer; }
 
       <!-- Hidden field kept for backwards compat -->
       <input type="hidden" id="aff-base-hidden">
+
+      <!-- ── Cloud sync diagnostics ── -->
+      <div class="sync-test-section">
+        <h3 class="sync-test-title">Cloud Sync Diagnostics</h3>
+        <p class="modal-help">Verifies accounts and cloud saving end to end &mdash; connection, sign-in, and a live write/read/delete roundtrip against the database.</p>
+        <button id="sync-test-btn" type="button" class="btn btn-secondary" style="margin-top:.5rem">Test cloud sync</button>
+        <div id="sync-test-results" class="sync-test-results hidden"></div>
+      </div>
     </div>
   </div>
 
@@ -2741,6 +2775,83 @@ function showUserMenu() {
   // Simple confirm-based sign-out (replace with a dropdown if desired)
   if (confirm(`Signed in as ${currentUser.email}\n\nSign out?`)) signOut();
 }
+
+// ── Cloud sync diagnostics ─────────────────────────────────────────
+async function runSyncTest() {
+  const resEl = document.getElementById('sync-test-results');
+  const btn   = document.getElementById('sync-test-btn');
+  if (!resEl) return;
+  resEl.classList.remove('hidden');
+  resEl.innerHTML = '';
+  if (btn) { btn.disabled = true; btn.textContent = 'Testing…'; }
+
+  const row = (label, ok, detail) => {
+    resEl.innerHTML += '<div class="sync-test-row"><span class="sync-test-icon">' +
+      (ok === null ? '⏳' : ok ? '✅' : '❌') + '</span><span class="sync-test-label">' + label +
+      '</span>' + (detail ? '<span class="sync-test-detail">' + detail + '</span>' : '') + '</div>';
+  };
+
+  try {
+    // 1. Config present
+    const cfg = configured();
+    row('Supabase credentials configured', cfg, cfg ? '' : 'URL/key placeholders still set');
+    if (!cfg) return;
+
+    // 2. Client library loaded
+    const client = sb();
+    row('Supabase client library loaded', !!client, client ? '' : 'CDN script blocked or failed to load');
+    if (!client) return;
+
+    // 3. Reachable — anonymous read against inventory (public-read policy)
+    let reachable = false, reachDetail = '';
+    try {
+      const { error } = await client.from('inventory').select('id').limit(1);
+      reachable = !error;
+      reachDetail = error ? error.message : '';
+    } catch (e) { reachDetail = e.message; }
+    row('Database reachable (tables exist)', reachable, reachDetail);
+    if (!reachable) { row('Hint', false, 'Run the SQL setup in Supabase → SQL Editor'); return; }
+
+    // 4. Signed in?
+    const signedIn = !!currentUser;
+    row('Signed in', signedIn, signedIn ? currentUser.email : 'Sign in first to test personal data sync');
+    if (!signedIn) return;
+
+    // 5. Write / read / delete roundtrip on user_data
+    const testKey = 'mtgdb:__synctest__';
+    const testVal = { ts: Date.now(), rand: Math.random() };
+    let writeOk = false, readOk = false, cleanOk = false, rtDetail = '';
+    try {
+      await CloudStore.set(testKey, testVal);
+      writeOk = true;
+      const back = await CloudStore.get(testKey);
+      readOk = back && back.ts === testVal.ts;
+      // Clean up the test row
+      await client.from('user_data').delete()
+        .eq('user_id', currentUser.id).eq('key', testKey);
+      cleanOk = true;
+    } catch (e) { rtDetail = e.message; }
+    row('Cloud write', writeOk, rtDetail);
+    row('Cloud read-back matches', readOk, readOk ? '' : 'Value did not round-trip');
+    row('Cleanup', cleanOk, '');
+
+    // 6. Local mirror wrap active
+    const wrapped = typeof Store !== 'undefined' && Store.__cloudWrapped === true;
+    row('Live sync active (saves mirror to cloud)', wrapped,
+      wrapped ? 'Deck/collection saves push to the cloud automatically' : 'Wrapper not installed');
+
+    const allGood = cfg && client && reachable && signedIn && writeOk && readOk && wrapped;
+    resEl.innerHTML += '<div class="sync-test-verdict ' + (allGood ? 'sync-pass' : 'sync-fail') + '">' +
+      (allGood ? '✓ Cloud sync fully operational' : '✗ Issues found — see above') + '</div>';
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Test cloud sync'; }
+  }
+}
+
+// Wire the button when DOM is ready (auth.js loads before body, so defer)
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('sync-test-btn')?.addEventListener('click', runSyncTest);
+});
 
 
 /**
