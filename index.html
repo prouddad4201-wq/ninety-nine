@@ -2434,6 +2434,27 @@ function configured() {
   return SUPABASE_URL !== 'YOUR_SUPABASE_URL' && SUPABASE_ANON_KEY !== 'YOUR_SUPABASE_ANON_KEY';
 }
 
+// ── Error log (ring buffer, readable from Sync Diagnostics) ──────
+window.__errlog = window.__errlog || [];
+function logErr(context, err) {
+  const entry = { t: new Date().toISOString(), context, msg: (err && err.message) || String(err) };
+  window.__errlog.push(entry);
+  if (window.__errlog.length > 50) window.__errlog.shift();
+  console.warn('[ninety-nine]', context, entry.msg);
+}
+
+// ── Per-key local timestamps (for merge-aware sync) ──────────────
+const TS_KEY = 'mtgmeta:ts';
+function getLocalTs() {
+  try { return JSON.parse(localStorage.getItem(TS_KEY) || '{}'); } catch { return {}; }
+}
+function setLocalTs(key, iso) {
+  try {
+    const m = getLocalTs(); m[key] = iso;
+    localStorage.setItem(TS_KEY, JSON.stringify(m));
+  } catch (e) { logErr('setLocalTs', e); }
+}
+
 // ── Auth state ─────────────────────────────────────────────────────
 let currentUser = null;
 let authListeners = [];
@@ -2506,28 +2527,57 @@ const CloudStore = {
         { user_id: currentUser.id, key, value: JSON.stringify(value), updated_at: new Date().toISOString() },
         { onConflict: 'user_id,key' }
       );
-    } catch (e) { console.warn('CloudStore.set failed:', e.message); }
+    } catch (e) { logErr('CloudStore.set:' + key, e); }
   },
-  async pullAll() {
-    if (!currentUser) return;
+  /**
+   * Merge-aware two-way sync. For each key, the NEWER side wins based on
+   * timestamps — cloud rows carry updated_at, local writes are stamped in
+   * mtgmeta:ts. Prevents a stale cloud copy from wiping fresh local decks
+   * (and vice versa).
+   */
+  async syncMerge() {
+    if (!currentUser) return { pulled: 0, pushed: 0 };
+    let pulled = 0, pushed = 0;
     try {
-      const { data } = await sb().from('user_data').select('key, value').eq('user_id', currentUser.id);
-      if (!data) return;
-      data.forEach(({ key, value }) => {
-        try { localStorage.setItem(key, value); } catch {}
-      });
-    } catch {}
+      const { data, error } = await sb()
+        .from('user_data')
+        .select('key, value, updated_at')
+        .eq('user_id', currentUser.id);
+      if (error) { logErr('syncMerge.fetch', error); return { pulled, pushed }; }
+
+      const cloud = new Map((data || []).map(r => [r.key, r]));
+      const localTs = getLocalTs();
+      const localKeys = Object.keys(localStorage).filter(k => k.startsWith('mtgdb:'));
+      const allKeys = new Set([...cloud.keys(), ...localKeys]);
+
+      for (const key of allKeys) {
+        const cloudRow = cloud.get(key);
+        const cloudTime = cloudRow ? Date.parse(cloudRow.updated_at || 0) : 0;
+        const localTime = Date.parse(localTs[key] || 0) || 0;
+        const localVal  = localStorage.getItem(key);
+
+        if (cloudRow && (!localVal || cloudTime > localTime)) {
+          // Cloud is newer (or key only exists in cloud) → pull down
+          try {
+            localStorage.setItem(key, cloudRow.value);
+            setLocalTs(key, cloudRow.updated_at || new Date().toISOString());
+            pulled++;
+          } catch (e) { logErr('syncMerge.pull:' + key, e); }
+        } else if (localVal && (!cloudRow || localTime > cloudTime)) {
+          // Local is newer (or key only exists locally) → push up
+          try {
+            await this.set(key, JSON.parse(localVal));
+            pushed++;
+          } catch (e) { logErr('syncMerge.push:' + key, e); }
+        }
+        // equal timestamps → already in sync, skip
+      }
+    } catch (e) { logErr('syncMerge', e); }
+    return { pulled, pushed };
   },
-  async pushAll() {
-    if (!currentUser) return;
-    const keys = Object.keys(localStorage).filter(k => k.startsWith('mtgdb:'));
-    for (const key of keys) {
-      try {
-        const value = localStorage.getItem(key);
-        if (value) await this.set(key, JSON.parse(value));
-      } catch {}
-    }
-  },
+  // Back-compat aliases (older call sites)
+  async pullAll() { return this.syncMerge(); },
+  async pushAll() { /* handled by syncMerge */ },
 };
 
 // ── Inventory (seller) ─────────────────────────────────────────────
@@ -2630,6 +2680,7 @@ function wireAuthUI() {
     const _origSet = Store.set.bind(Store);
     Store.set = async (key, value) => {
       await _origSet(key, value);
+      if (key.startsWith('mtgdb:')) setLocalTs(key, new Date().toISOString());
       if (currentUser && key.startsWith('mtgdb:')) {
         CloudStore.set(key, value); // fire-and-forget — UI never waits on network
       }
@@ -2843,6 +2894,16 @@ async function runSyncTest() {
     const allGood = cfg && client && reachable && signedIn && writeOk && readOk && wrapped;
     resEl.innerHTML += '<div class="sync-test-verdict ' + (allGood ? 'sync-pass' : 'sync-fail') + '">' +
       (allGood ? '✓ Cloud sync fully operational' : '✗ Issues found — see above') + '</div>';
+
+    // Recent errors (ring buffer) — forensics when something silently failed
+    const errs = (window.__errlog || []).slice(-8).reverse();
+    if (errs.length) {
+      resEl.innerHTML += '<div class="sync-test-row" style="margin-top:8px"><span class="sync-test-label">Recent errors (' + (window.__errlog || []).length + ' logged)</span></div>' +
+        errs.map(e => '<div class="sync-test-detail" style="padding-left:4px">' +
+          e.t.slice(11, 19) + ' — ' + e.context + ': ' + e.msg.slice(0, 90) + '</div>').join('');
+    } else {
+      resEl.innerHTML += '<div class="sync-test-detail" style="margin-top:8px">No errors logged this session.</div>';
+    }
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = 'Test cloud sync'; }
   }
@@ -3373,7 +3434,26 @@ const Store = (() => {
       } catch (_) {}
       try {
         if (typeof localStorage !== 'undefined') localStorage.setItem(key, str);
-      } catch (_) {}
+      } catch (e) {
+        // Quota exceeded is the failure users actually hit — surface it
+        const isQuota = e && (e.name === 'QuotaExceededError' || e.code === 22);
+        if (typeof window !== 'undefined') {
+          if (window.__errlog) window.__errlog.push({
+            t: new Date().toISOString(),
+            context: 'Store.set:' + key,
+            msg: isQuota ? 'localStorage quota exceeded' : (e.message || String(e)),
+          });
+          if (isQuota && !window.__quotaWarned) {
+            window.__quotaWarned = true; // warn once per session, not per save
+            const t = document.getElementById('toast');
+            if (t) {
+              t.textContent = 'Local storage is full — sign in so your data saves to the cloud, or export your collection.';
+              t.classList.add('show', 'toast-error');
+              setTimeout(() => t.classList.remove('show', 'toast-error'), 6000);
+            }
+          }
+        }
+      }
     },
   };
 })();
@@ -4877,14 +4957,23 @@ const Render = (() => {
       }
 
       const archetypeCards = [];
-      for (const q of effectiveQueries) {
+      // Dedupe identical query strings (multi-tribe commanders generate overlaps)
+      // and space requests ~80ms apart per Scryfall's rate guidance so a launch
+      // spike of concurrent users doesn't trip 429s.
+      const seenQ = new Set();
+      const uniqueQueries = effectiveQueries.filter(q => {
+        if (seenQ.has(q.q)) return false;
+        seenQ.add(q.q); return true;
+      });
+      for (const q of uniqueQueries) {
         try {
           const pool = await fetchVariedPool(
             `${q.q} ${baseFrag}`, { order: 'edhrec', unique: 'cards' }
           );
           const cap = Math.max(1, q.cap + capJitter());
           archetypeCards.push(...dedup(pool).slice(0, cap));
-        } catch (_) {}
+        } catch (e) { if (window.__errlog) window.__errlog.push({ t: new Date().toISOString(), context: 'autoBuild.query', msg: (q.q + ': ' + (e.message || e)).slice(0, 120) }); }
+        await new Promise(r => setTimeout(r, 80));
       }
 
       // ── 2. Power-level priority pools (GCs, tutors, fast mana) ───────────
@@ -6505,6 +6594,189 @@ ${sections}`;
   };
 
   /* ================================================================
+     AI COACH — restored engine (calls Anthropic API via artifact proxy)
+  ================================================================ */
+
+  function updateCoachDeckBadge() {
+    const badge = $('#coach-deck-badge');
+    const label = $('#coach-deck-context-label');
+    const hasDeck = state.deck.length > 0 && state.commanders.length > 0;
+    $$('.coach-action-btn').forEach(b => { b.disabled = !hasDeck; });
+    if (badge) {
+      badge.classList.toggle('hidden', !hasDeck);
+      if (hasDeck) {
+        const total = state.deck.reduce((s, e) => s + e.count, 0);
+        badge.textContent = `${state.commanders.map(c => c.name).join(' + ')} — ${total} cards`;
+      }
+    }
+    if (label) {
+      label.textContent = hasDeck
+        ? 'Pick a tool below — responses use your full decklist.'
+        : 'Build or load a deck first, then use any tool below.';
+    }
+  }
+
+  /** Light markdown renderer for coach responses */
+  function coachMarkdown(text) {
+    let html = Render.escapeHtml(text);
+    html = html.replace(/^### (.+)$/gm, '<h4>$1</h4>');
+    html = html.replace(/^## (.+)$/gm, '<h3>$1</h3>');
+    html = html.replace(/^# (.+)$/gm, '<h3>$1</h3>');
+    html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+    html = html.replace(/\*([^*\n]+)\*/g, '<em>$1</em>');
+    html = html.replace(/^[-•] (.+)$/gm, '<li>$1</li>');
+    html = html.replace(/(<li>.*<\/li>\n?)+/g, m => `<ul>${m}</ul>`);
+    html = html.replace(/^\d+\. (.+)$/gm, '<li>$1</li>');
+    html = html.replace(/\n\n/g, '</p><p>');
+    html = html.replace(/\n/g, '<br>');
+    return `<p>${html}</p>`;
+  }
+
+  /**
+   * Call the Anthropic API. Accepts { system, history } and returns reply text.
+   */
+  async function callCoachAI({ system, history }) {
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 4096,
+        system: system || 'You are an expert Magic: The Gathering Commander coach.',
+        messages: history,
+      }),
+    });
+    if (!resp.ok) {
+      const errBody = await resp.text().catch(() => '');
+      throw new Error(`AI request failed (${resp.status})${errBody ? ': ' + errBody.slice(0, 120) : ''}`);
+    }
+    const data = await resp.json();
+    return (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n');
+  }
+
+  /** Run one of the 8 coach tools */
+  async function runCoachAction(mode) {
+    const prompt = COACH_PROMPTS[mode];
+    if (!prompt) return;
+    const deckCtx = deckContextString();
+    if (!deckCtx) { toast('Build a deck first.', true); return; }
+
+    $('#coach-response-title').textContent = prompt.title;
+    $('#coach-actions').classList.add('hidden');
+    $('#coach-response-wrap').classList.remove('hidden');
+    $('#coach-output').classList.add('hidden');
+    $('#coach-output').innerHTML = '';
+    $('#coach-chat-history').innerHTML = '';
+    const loading = $('#coach-loading');
+    loading.classList.remove('hidden');
+    $('#coach-loading-text').textContent = prompt.loading;
+
+    try {
+      coachHistory = [{ role: 'user', content: prompt.user(deckCtx) }];
+      const reply = await callCoachAI({ system: prompt.system, history: coachHistory });
+      coachHistory.push({ role: 'assistant', content: reply });
+      coachCurrentMode = mode;
+      loading.classList.add('hidden');
+      const out = $('#coach-output');
+      out.innerHTML = coachMarkdown(reply);
+      out.classList.remove('hidden');
+      $('#coach-chat-wrap').classList.remove('hidden');
+    } catch (e) {
+      loading.classList.add('hidden');
+      const out = $('#coach-output');
+      out.innerHTML = `<p class="error-text">Coach unavailable: ${Render.escapeHtml(e.message)}</p>`;
+      out.classList.remove('hidden');
+    }
+  }
+
+  /** Follow-up chat send */
+  async function sendCoachChat() {
+    const input = $('#coach-chat-input');
+    const historyEl = $('#coach-chat-history');
+    const msg = (input?.value || '').trim();
+    if (!msg || !historyEl) return;
+    input.value = '';
+
+    historyEl.innerHTML += `<div class="coach-msg coach-msg-user">${Render.escapeHtml(msg)}</div>`;
+    historyEl.innerHTML += `<div class="coach-msg coach-msg-ai coach-msg-typing" id="coach-typing">…</div>`;
+    historyEl.scrollTop = historyEl.scrollHeight;
+
+    coachHistory.push({ role: 'user', content: msg });
+    try {
+      const reply = await callCoachAI({
+        system: 'You are an expert Magic: The Gathering Commander coach. Continue helping with this deck. Be concise and specific.',
+        history: coachHistory,
+      });
+      coachHistory.push({ role: 'assistant', content: reply });
+      document.getElementById('coach-typing')?.remove();
+      historyEl.innerHTML += `<div class="coach-msg coach-msg-ai">${coachMarkdown(reply)}</div>`;
+    } catch (e) {
+      document.getElementById('coach-typing')?.remove();
+      historyEl.innerHTML += `<div class="coach-msg coach-msg-ai error-text">Error: ${Render.escapeHtml(e.message)}</div>`;
+    }
+    historyEl.scrollTop = historyEl.scrollHeight;
+  }
+
+  /** Wire the Coach tab */
+  function wireCoachTab() {
+    $$('.coach-action-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const mode = btn.dataset.coach;
+        if (mode === 'test') runDeckTest();
+        else if (mode) runCoachAction(mode);
+      });
+    });
+    $('#coach-back-btn')?.addEventListener('click', () => {
+      $('#coach-response-wrap').classList.add('hidden');
+      $('#coach-actions').classList.remove('hidden');
+      coachHistory = [];
+      coachCurrentMode = null;
+    });
+    $('#coach-chat-send')?.addEventListener('click', sendCoachChat);
+    $('#coach-chat-input')?.addEventListener('keydown', e => {
+      if (e.key === 'Enter') { e.preventDefault(); sendCoachChat(); }
+    });
+    updateCoachDeckBadge();
+  }
+
+  /* ================================================================
+     BUY DROPDOWN — waterfall of purchase options per card
+  ================================================================ */
+  function openBuyOptions(card, anchorBtn) {
+    // Remove any existing dropdown
+    document.querySelector('.buy-dropdown')?.remove();
+    const arenaLegal = !!(card.legalities && (card.legalities.historic === 'legal' || card.legalities.alchemy === 'legal' || card.legalities.standard === 'legal'));
+    const options = (typeof buyOptions === 'function') ? buyOptions(card.name, arenaLegal) : [];
+    if (!options.length) {
+      // Fallback: straight to TCGPlayer
+      window.open(window._buildBuyLink ? window._buildBuyLink(card.name) : `https://www.tcgplayer.com/search/magic/product?q=${encodeURIComponent(card.name)}`, '_blank');
+      return;
+    }
+    // Only render http(s)/mailto links — blocks javascript: and data: URIs
+    const safeOptions = options.filter(o =>
+      typeof o.url === 'string' && /^(https:\/\/|mailto:)/i.test(o.url));
+    const dd = document.createElement('div');
+    dd.className = 'buy-dropdown';
+    dd.innerHTML = safeOptions.map(o =>
+      `<a class="buy-option ${o.variant || ''}" href="${o.url}" target="_blank" rel="noopener">
+        <span class="buy-option-name">${Render.escapeHtml(o.label)}</span>
+        ${o.sublabel ? `<span class="buy-option-sub">${Render.escapeHtml(o.sublabel)}</span>` : ''}
+      </a>`
+    ).join('');
+    document.body.appendChild(dd);
+    const rect = anchorBtn.getBoundingClientRect();
+    dd.style.position = 'fixed';
+    dd.style.top = Math.min(rect.bottom + 6, window.innerHeight - dd.offsetHeight - 12) + 'px';
+    dd.style.left = Math.min(rect.left, window.innerWidth - dd.offsetWidth - 12) + 'px';
+    dd.style.zIndex = 9999;
+    const close = (e) => {
+      if (!dd.contains(e.target)) { dd.remove(); document.removeEventListener('click', close, true); }
+    };
+    setTimeout(() => document.addEventListener('click', close, true), 0);
+  }
+
+
+  /* ================================================================
      DECK SIMULATOR — pure JS, no API, runs 800 games in <200ms
   ================================================================ */
 
@@ -6576,7 +6848,7 @@ ${sections}`;
   }
 
   /** Fisher-Yates shuffle with PRNG */
-  function shuffle(arr, rand) {
+  function simShuffle(arr, rand) {
     for (let i = arr.length - 1; i > 0; i--) {
       const j = (rand() * (i + 1)) | 0;
       [arr[i], arr[j]] = [arr[j], arr[i]];
@@ -6605,7 +6877,7 @@ ${sections}`;
    */
   function simulateGame(library, commanders, rand) {
     const deck   = [...library];
-    shuffle(deck, rand);
+    simShuffle(deck, rand);
 
     // Mulligan
     let handSize  = 7;
@@ -6721,7 +6993,7 @@ ${sections}`;
         won = true; winTurn = turn + 1; winCon = 'aggro'; break;
       }
       if (turn >= 12 && board.ramp >= 5 && board.creatures >= 3) {
-        won = true; winTurn = turn + rand() < 0.4 ? 1 : 2;
+        won = true; winTurn = turn + (rand() < 0.4 ? 1 : 2);
         winCon = 'value'; break;
       }
 
