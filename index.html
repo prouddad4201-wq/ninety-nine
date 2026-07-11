@@ -9,6 +9,12 @@
   <meta name="apple-mobile-web-app-title" content="Ninety-Nine">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+  <link rel="apple-touch-icon" href="icon-180.png">
+  <link rel="apple-touch-icon" sizes="167x167" href="icon-167.png">
+  <link rel="apple-touch-icon" sizes="152x152" href="icon-152.png">
+  <link rel="apple-touch-icon" sizes="120x120" href="icon-120.png">
   <title>Ninety-Nine — Commander Deck Builder &amp; Card Search</title>
   <meta name="description" content="Build a Magic: The Gathering Commander deck from any commander, every set. Get EDHREC-style recommendations, color identity and Bracket checks, and one-click TCGplayer buy links — no login, nothing installed.">
 
@@ -7762,5 +7768,15 @@ ${sections}`;
 })();
 
 </script>
+  <script>
+    // PWA service worker — offline support + home-screen install
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('sw.js').catch(() => {
+          /* SW optional — app works without it */
+        });
+      });
+    }
+  </script>
 </body>
 </html>
