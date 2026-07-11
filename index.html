@@ -2760,6 +2760,14 @@ function wireAuthUI() {
   document.getElementById('auth-close')?.addEventListener('click', closeAuthModal);
   document.getElementById('auth-modal')?.addEventListener('click', e => { if (e.target === document.getElementById('auth-modal')) closeAuthModal(); });
 
+  // After OAuth/magic-link redirect, strip auth tokens from the URL hash so
+  // they aren't left in history, bookmarks, or a shared link.
+  if (window.location.hash && /access_token|refresh_token|type=recovery/.test(window.location.hash)) {
+    try {
+      history.replaceState(null, '', window.location.pathname + window.location.search);
+    } catch (e) { logErr('hashCleanup', e); }
+  }
+
   // Auth state changes → update UI
   let _lastUserId = null;
   onAuthChange(async (user) => {
@@ -3759,22 +3767,30 @@ const Scryfall = (() => {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
-  async function throttledFetch(url, options) {
+  async function throttledFetch(url, options, _retries = 0) {
     const now = Date.now();
     const gap = now - lastRequest;
     if (gap < MIN_INTERVAL) await wait(MIN_INTERVAL - gap);
     lastRequest = Date.now();
 
+    // 15s timeout so a hung request fails cleanly instead of stalling a build.
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), 15000);
     let res;
     try {
-      res = await fetch(url, options);
+      res = await fetch(url, { ...options, signal: ctl.signal });
     } catch (err) {
+      clearTimeout(timer);
+      if (err.name === 'AbortError') throw new Error('Scryfall request timed out. Check your connection.');
       throw new Error('Network error reaching Scryfall. Check your connection.');
     }
+    clearTimeout(timer);
 
     if (res.status === 429) {
-      await wait(800);
-      return throttledFetch(url, options);
+      // Cap retries so a persistent 429 can't loop forever.
+      if (_retries >= 4) throw new Error('Scryfall rate limit — please wait a moment and retry.');
+      await wait(800 * (_retries + 1)); // linear backoff
+      return throttledFetch(url, options, _retries + 1);
     }
     if (!res.ok) {
       let detail = `Scryfall returned HTTP ${res.status}`;
@@ -4394,6 +4410,11 @@ const Render = (() => {
 
   /* ------------------------------ Tabs ---------------------------------- */
   function switchTab(tab) {
+    // Leaving the Collection tab with the camera live = privacy risk + battery drain.
+    // Kill the stream on any navigation away from it.
+    if (state.activeTab === 'collection' && tab !== 'collection' && typeof stopScan === 'function') {
+      stopScan();
+    }
     state.activeTab = tab;
     $$('.tab-btn').forEach((b) => {
       const on = b.dataset.tab === tab;
@@ -4821,14 +4842,14 @@ const Render = (() => {
     const btn = $('#autobuild-btn');
     btn.disabled = true; btn.textContent = 'Building…';
 
-    // Safety net: GC list must be ready for correct bracket estimate
-    if (state.gameChangerNames.size === 0) {
-      btn.textContent = 'Loading card data…';
-      await loadGameChangers();
-      btn.textContent = 'Building…';
-    }
-
     try {
+      // Safety net: GC list must be ready for correct bracket estimate
+      if (state.gameChangerNames.size === 0) {
+        btn.textContent = 'Loading card data…';
+        await loadGameChangers();
+        btn.textContent = 'Building…';
+      }
+
       const ci         = combinedIdentity(state.commanders);
       const ciFrag     = identityQueryFragment(ci);
       const format     = FORMATS[state.buildPrefs.format]     || FORMATS.commander;
@@ -6411,6 +6432,12 @@ const Render = (() => {
     $('#scan-capture-btn')?.addEventListener('click', captureAndRecognize);
     $('#scan-auto-btn')?.addEventListener('click', toggleAutoScan);
     $('#scan-stop-btn')?.addEventListener('click', stopScan);
+    // Belt-and-suspenders: kill camera if the page is hidden or backgrounded
+    // (tab switch, phone lock, app switch) so the indicator light never lingers.
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden && typeof stopScan === 'function') stopScan();
+    });
+    window.addEventListener('pagehide', () => { if (typeof stopScan === 'function') stopScan(); });
     $('#scan-upload-input')?.addEventListener('change', e => {
       if (e.target.files[0]) scanFromUpload(e.target.files[0]);
       e.target.value = '';
@@ -6636,16 +6663,29 @@ ${sections}`;
    * Call the Anthropic API. Accepts { system, history } and returns reply text.
    */
   async function callCoachAI({ system, history }) {
-    const resp = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-6',
-        max_tokens: 4096,
-        system: system || 'You are an expert Magic: The Gathering Commander coach.',
-        messages: history,
-      }),
-    });
+    // Abort after 60s so a stalled request surfaces an error instead of an
+    // infinite spinner. Coach responses normally return in 5-15s.
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), 60000);
+    let resp;
+    try {
+      resp = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        signal: ctl.signal,
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-6',
+          max_tokens: 4096,
+          system: system || 'You are an expert Magic: The Gathering Commander coach.',
+          messages: history,
+        }),
+      });
+    } catch (e) {
+      clearTimeout(timer);
+      if (e.name === 'AbortError') throw new Error('Request timed out after 60s. Check your connection and try again.');
+      throw e;
+    }
+    clearTimeout(timer);
     if (!resp.ok) {
       const errBody = await resp.text().catch(() => '');
       throw new Error(`AI request failed (${resp.status})${errBody ? ': ' + errBody.slice(0, 120) : ''}`);
