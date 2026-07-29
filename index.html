@@ -1755,6 +1755,23 @@ select { cursor: pointer; }
 .life-turn-btn { background: var(--surface-2); border: 1px solid var(--border); border-radius: 7px; color: var(--text-dim); font-size: .72rem; padding: 5px 10px; cursor: pointer; }
 .life-turn-btn:hover { color: var(--amber); border-color: var(--amber); }
 
+/* ── Printings / Variants grid ──────────────────────────────────── */
+.printings-count { font-family: var(--font-mono); font-size: .75rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 14px; }
+.printings-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 14px; }
+.print-card { background: var(--surface-2); border: 1px solid var(--border-hi); border-radius: 12px; overflow: hidden; display: flex; flex-direction: column; }
+.print-img-wrap { background: var(--surface-3); aspect-ratio: 488 / 340; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+.print-img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.print-noimg { color: var(--text-faint); font-size: .8rem; }
+.print-meta { padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; }
+.print-set { font-size: .8rem; font-weight: 600; color: var(--text); line-height: 1.3; }
+.print-finishes { display: flex; gap: 5px; flex-wrap: wrap; }
+.print-finish { font-family: var(--font-mono); font-size: .6rem; text-transform: uppercase; letter-spacing: .04em; padding: 2px 7px; border-radius: 5px; background: var(--surface-4); color: var(--text-dim); border: 1px solid var(--border); }
+.print-foil { background: linear-gradient(90deg, rgba(245,166,35,.15), rgba(144,64,200,.15)); color: var(--amber-hi); border-color: rgba(245,166,35,.3); }
+.print-etched { background: rgba(144,64,200,.12); color: #C79BEC; border-color: rgba(144,64,200,.3); }
+.print-price { font-family: var(--font-mono); font-size: .82rem; font-weight: 700; color: var(--success); }
+.print-actions { display: flex; gap: 5px; margin-top: 4px; flex-wrap: wrap; }
+.btn-sm { padding: 5px 10px !important; font-size: .72rem !important; flex: 1; min-width: 0; }
+
 </style>
 </head>
 <body>
@@ -5430,15 +5447,50 @@ const Render = (() => {
   async function showPrintings(name) {
     const modal = $('#printings-modal');
     $('#printings-title').textContent = `All printings \u2014 ${name}`;
-    $('#printings-body').innerHTML = '<p class="dim">Loading\u2026</p>';
+    $('#printings-body').innerHTML = '<p class="dim">Loading every printing\u2026</p>';
     modal.classList.remove('hidden');
     try {
       const res = await Scryfall.allPrintings(name);
       const prints = res.data || [];
       prints.forEach(cacheCard);
-      $('#printings-body').innerHTML = `<div class="card-grid">${prints.map((c) => Render.cardTile(c, {
-        actions: [{ action: 'add-to-deck', label: 'Add to deck', variant: 'btn-primary' }, { action: 'buy', label: 'Buy', variant: 'btn-secondary' }],
-      })).join('')}</div>`;
+      if (!prints.length) {
+        $('#printings-body').innerHTML = '<p class="dim">No printings found.</p>';
+        return;
+      }
+      // Rich variant cards: art + set + collector no. + finishes + price
+      $('#printings-body').innerHTML =
+        `<p class="printings-count">${prints.length} printing${prints.length === 1 ? '' : 's'} \u2014 tap any to add or buy</p>` +
+        `<div class="printings-grid">` +
+        prints.map((c) => {
+          const img = (c.image_uris && c.image_uris.normal)
+            || (c.card_faces && c.card_faces[0] && c.card_faces[0].image_uris && c.card_faces[0].image_uris.normal)
+            || '';
+          const finishes = (c.finishes || []).map(f =>
+            f === 'foil' ? '<span class="print-finish print-foil">\u2728 Foil</span>'
+            : f === 'etched' ? '<span class="print-finish print-etched">Etched</span>'
+            : '<span class="print-finish">Nonfoil</span>'
+          ).join('');
+          const usd  = c.prices && c.prices.usd ? '$' + c.prices.usd : '';
+          const foilUsd = c.prices && c.prices.usd_foil ? '$' + c.prices.usd_foil + ' foil' : '';
+          const priceStr = [usd, foilUsd].filter(Boolean).join(' \u00b7 ') || 'price n/a';
+          const setLine = `${c.set_name} (${(c.set || '').toUpperCase()}) \u2022 #${c.collector_number}`;
+          return `<div class="print-card" data-id="${Render.escapeHtml(c.id)}">
+            <div class="print-img-wrap">
+              ${img ? `<img class="print-img" src="${img}" alt="${Render.escapeHtml(c.name)}" loading="lazy">` : '<div class="print-img print-noimg">No image</div>'}
+            </div>
+            <div class="print-meta">
+              <div class="print-set">${Render.escapeHtml(setLine)}</div>
+              <div class="print-finishes">${finishes}</div>
+              <div class="print-price">${Render.escapeHtml(priceStr)}</div>
+              <div class="print-actions">
+                <button class="btn btn-primary btn-sm" data-action="print-add" data-id="${Render.escapeHtml(c.id)}">+ Deck</button>
+                <button class="btn btn-secondary btn-sm" data-action="print-buy" data-id="${Render.escapeHtml(c.id)}">Buy</button>
+                <button class="btn btn-ghost btn-sm" data-action="print-coll" data-id="${Render.escapeHtml(c.id)}">+ Coll</button>
+              </div>
+            </div>
+          </div>`;
+        }).join('') +
+        `</div>`;
     } catch (e) {
       $('#printings-body').innerHTML = `<p class="error-text">${Render.escapeHtml(e.message)}</p>`;
     }
@@ -5998,15 +6050,16 @@ const Render = (() => {
     const ownedTag = owned ? '<span class="badge badge-owned">In collection</span>' : '';
     const oracle   = (card.oracle_text || '').slice(0, 130) + ((card.oracle_text || '').length > 130 ? '…' : '');
     const addBtn   = '<button class="btn btn-primary" data-action="scan-add-card" data-name="' + Render.escapeHtml(card.name) + '">' + (owned ? '+ Add another' : '+ Add to collection') + '</button>';
+    const varBtn   = '<button class="btn btn-secondary" data-action="printings" data-id="' + Render.escapeHtml(card.id) + '">\uD83C\uDFB4 All variants</button>';
     return '<div class="scan-match-full">'
       + imgTag
       + '<div class="scan-match-info">'
       + '<div class="scan-match-name">' + Render.escapeHtml(card.name) + '</div>'
       + '<div class="scan-match-meta"><span>' + Render.escapeHtml(card.type_line || '') + '</span>' + priceTag + ownedTag + '</div>'
       + '<div class="scan-match-oracle">' + Render.escapeHtml(oracle) + '</div>'
-      + '<div class="scan-match-actions">' + addBtn + '</div>'
+      + '<div class="scan-match-actions">' + addBtn + varBtn + '</div>'
       + '</div></div>'
-      + '<p class="scan-status">OCR read: “' + Render.escapeHtml(ocrText) + '”</p>';
+      + '<p class="scan-status">OCR read: "' + Render.escapeHtml(ocrText) + '"</p>';
   }
 
 
@@ -6405,6 +6458,7 @@ const Render = (() => {
       const inColl = state.collection.has(card.name.toLowerCase());
       actEl.innerHTML =
         `<button class="btn btn-primary" data-action="cdm-add-deck" data-id="${Render.escapeHtml(card.id)}">${inDeck ? '\u2713 In deck' : '+ Add to deck'}</button>` +
+        `<button class="btn btn-secondary" data-action="cdm-variants" data-id="${Render.escapeHtml(card.id)}">\uD83C\uDFB4 Variants</button>` +
         `<button class="btn btn-secondary" data-action="cdm-buy" data-id="${Render.escapeHtml(card.id)}">Buy</button>` +
         (inColl ? '' : `<button class="btn btn-ghost" data-action="cdm-add-coll" data-id="${Render.escapeHtml(card.id)}">+ Collection</button>`);
     }
@@ -6427,6 +6481,8 @@ const Render = (() => {
       switch (btn.dataset.action) {
         case 'cdm-add-deck':
           addToDeck(card); populateCardDetail(card, cdmFlipState); break;
+        case 'cdm-variants':
+          closeCardDetail(); showPrintings(card.name); break;
         case 'cdm-buy':
           openBuyOptions(card, btn); break;
         case 'cdm-add-coll':
@@ -6577,6 +6633,9 @@ const Render = (() => {
         case 'add-to-deck':    if (card) addToDeck(card); break;
         case 'buy':            if (card) openBuyOptions(card, e.target); break;
         case 'printings':      if (card) showPrintings(card.name); break;
+        case 'print-add':      if (card) { addToDeck(card); toast(`Added ${card.name} (${(card.set||'').toUpperCase()}).`); } break;
+        case 'print-buy':      if (card) openBuyOptions(card, e.target); break;
+        case 'print-coll':     if (card) { fetchAndAddToCollection(card.name); toast(`Added ${card.name} to collection.`); } break;
         case 'deck-remove':    if (card) removeFromDeck(card); break;
         case 'deck-inc':       if (card) adjustBasic(card, 1); break;
         case 'deck-dec':       if (card) adjustBasic(card, -1); break;
