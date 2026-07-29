@@ -1781,6 +1781,14 @@ select { cursor: pointer; }
 .buy-option-mkm .buy-option-name::before { content: '🇪🇺 '; }
 .buy-option-ch .buy-option-name::before { content: '💻 '; }
 
+/* ── Archidekt import ───────────────────────────────────────────── */
+.archidekt-import { margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--border); }
+.archidekt-import-label { font-family: var(--font-mono); font-size: .68rem; text-transform: uppercase; letter-spacing: .08em; color: var(--text-faint); margin-bottom: 8px; }
+.archidekt-import-row { display: flex; gap: 8px; }
+.archidekt-input { flex: 1; min-width: 0; background: var(--surface-2); border: 1px solid var(--border-hi); border-radius: 8px; color: var(--text); font-size: .85rem; padding: 10px 12px; outline: none; }
+.archidekt-input:focus { border-color: var(--amber); }
+.archidekt-status { font-size: .78rem; color: var(--text-dim); margin-top: 8px; min-height: 1.2em; }
+
 </style>
 </head>
 <body>
@@ -1996,6 +2004,15 @@ select { cursor: pointer; }
         Auto-build a deck around this commander
       </button>
       <p class="hint">Pick a format, archetype, and power level — the builder pulls matching cards from Scryfall and assembles a full 99. Toggle "Build from my collection" to use only cards you own. Rebuild anytime for a different take.</p>
+
+      <div class="archidekt-import">
+        <div class="archidekt-import-label">Or import an existing deck from Archidekt</div>
+        <div class="archidekt-import-row">
+          <input type="text" id="archidekt-url" class="archidekt-input" placeholder="Paste an archidekt.com/decks/… link">
+          <button id="archidekt-import-btn" type="button" class="btn btn-secondary">Import</button>
+        </div>
+        <div id="archidekt-status" class="archidekt-status"></div>
+      </div>
               </div><!-- /.commander-hero-left -->
 
         <div class="commander-hero-right" id="hero-features">
@@ -2757,10 +2774,32 @@ async function deleteInventoryItem(id) {
 // ── Buy link waterfall ─────────────────────────────────────────────
 const CK_BASE    = 'https://www.cardkingdom.com/catalog/search?search=1&filter[name]={QUERY}';
 const TCG_BASE   = 'https://www.tcgplayer.com/search/magic/product?productLineName=magic&q={QUERY}';
+
+// ── Affiliate codes ────────────────────────────────────────────────
+// Fill these in as each program approves you. TCGPlayer is handled separately
+// through the ⚙ settings Impact URL. Leave blank to use plain (unaffiliated)
+// links — the buttons still work, you just don't earn commission yet.
+const AFFILIATE = {
+  cardKingdom: '',   // Card Kingdom: your partner code → appended as &partner=CODE
+  cardmarket:  '',   // Cardmarket: referral param if/when approved
+  cardhoarder: '',   // Cardhoarder: referral code
+};
 const ARENA_BASE = 'https://www.mtgarena.com'; // fallback — Arena doesn't have deep card links
 
 function ckLink(name) {
-  return CK_BASE.replace('{QUERY}', encodeURIComponent(name));
+  let url = CK_BASE.replace('{QUERY}', encodeURIComponent(name));
+  if (AFFILIATE.cardKingdom) url += '&partner=' + encodeURIComponent(AFFILIATE.cardKingdom) + '&partner_args=single';
+  return url;
+}
+function cardmarketLink(name) {
+  let url = 'https://www.cardmarket.com/en/Magic/Products/Search?searchString=' + encodeURIComponent(name);
+  if (AFFILIATE.cardmarket) url += '&referrer=' + encodeURIComponent(AFFILIATE.cardmarket);
+  return url;
+}
+function cardhoarderLink(name) {
+  let url = 'https://www.cardhoarder.com/cards?data%5Bsearch%5D=' + encodeURIComponent(name);
+  if (AFFILIATE.cardhoarder) url += '&affiliate_id=' + encodeURIComponent(AFFILIATE.cardhoarder);
+  return url;
 }
 
 /**
@@ -2783,14 +2822,14 @@ function buyOptions(cardName, arenaLegal = false) {
   // 4. Cardmarket (Europe)
   options.push({
     label: 'Cardmarket (EU)',
-    url: 'https://www.cardmarket.com/en/Magic/Products/Search?searchString=' + encodeURIComponent(cardName),
+    url: cardmarketLink(cardName),
     variant: 'buy-option-mkm', priority: 4,
   });
 
   // 5. Cardhoarder (MTGO)
   options.push({
     label: 'Cardhoarder (MTGO)',
-    url: 'https://www.cardhoarder.com/cards?data%5Bsearch%5D=' + encodeURIComponent(cardName),
+    url: cardhoarderLink(cardName),
     variant: 'buy-option-ch', priority: 5,
   });
 
@@ -4669,6 +4708,91 @@ const Render = (() => {
     }
   }
 
+  /**
+   * Import a deck from an Archidekt URL. Archidekt's deck API is undocumented
+   * and open-beta, so we parse defensively. It returns categories with cards;
+   * we pull the commander(s) from the "Commander" category and load the rest
+   * as the 99, resolving each card's full data through Scryfall.
+   */
+  async function importArchidektDeck(rawUrl) {
+    const status = $('#archidekt-status');
+    const setStatus = (msg, isErr) => { if (status) { status.textContent = msg; status.className = 'archidekt-status' + (isErr ? ' error-text' : ''); } };
+
+    // Extract the numeric deck ID from any Archidekt URL form
+    const m = String(rawUrl).match(/archidekt\.com\/(?:api\/)?decks\/(\d+)/i) || String(rawUrl).match(/^(\d+)$/);
+    if (!m) { setStatus('That doesn\u2019t look like an Archidekt deck link.', true); return; }
+    const deckId = m[1];
+
+    setStatus('Fetching deck from Archidekt\u2026');
+    let data;
+    try {
+      const resp = await fetch(`https://archidekt.com/api/decks/${deckId}/`, { headers: { Accept: 'application/json' } });
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      data = await resp.json();
+    } catch (e) {
+      setStatus('Couldn\u2019t reach Archidekt (their API is unofficial and may block cross-site requests). Try the copy-paste import instead.', true);
+      return;
+    }
+
+    const cardsRaw = data.cards || [];
+    if (!cardsRaw.length) { setStatus('No cards found in that deck.', true); return; }
+
+    // Separate commanders from the rest by category
+    const commanderNames = [];
+    const mainNames = []; // {name, qty}
+    for (const entry of cardsRaw) {
+      const name = entry.card && entry.card.oracleCard && entry.card.oracleCard.name
+        || entry.card && entry.card.name;
+      if (!name) continue;
+      const cats = (entry.categories || []).map(c => String(c).toLowerCase());
+      const qty = entry.quantity || 1;
+      if (cats.includes('commander')) commanderNames.push(name);
+      else mainNames.push({ name, qty });
+    }
+
+    if (!commanderNames.length) {
+      setStatus('No commander found in that deck\u2019s Commander category.', true);
+      return;
+    }
+
+    // Clear current deck
+    state.deck = []; state.commanders = []; state.recommendations = {};
+
+    // Load commander(s)
+    setStatus('Loading commander\u2026');
+    try {
+      for (let i = 0; i < Math.min(commanderNames.length, 2); i++) {
+        const card = await Scryfall.named(commanderNames[i]);
+        cacheCard(card);
+        state.commanders[i] = card;
+        await new Promise(r => setTimeout(r, 80));
+      }
+    } catch (e) {
+      setStatus('Found the deck but couldn\u2019t load the commander. It may be a very new card.', true);
+      return;
+    }
+
+    // Load the 99
+    let loaded = 0, failed = 0;
+    for (const { name, qty } of mainNames) {
+      setStatus(`Loading cards\u2026 ${loaded}/${mainNames.length}`);
+      try {
+        const card = await Scryfall.named(name);
+        cacheCard(card);
+        state.deck.push({ card, count: qty });
+        loaded++;
+      } catch (_) { failed++; }
+      await new Promise(r => setTimeout(r, 80));
+    }
+
+    renderCommanderPanel();
+    persistDeck();
+    renderDeckTab();
+    switchTab('deck');
+    setStatus('');
+    toast(`Imported ${loaded} cards from Archidekt${failed ? ` (${failed} couldn\u2019t be found)` : ''}.`);
+  }
+
   function clearCommander(slot) {
     if (slot === 'primary') {
       if (state.deck.length && !confirm('Clear commander and current deck?')) return;
@@ -6540,6 +6664,13 @@ const Render = (() => {
   function wireEvents() {
     $$('.tab-btn').forEach((b) => b.addEventListener('click', () => switchTab(b.dataset.tab)));
     wireCommanderSearch(0); wireCommanderSearch(1);
+    // Archidekt deck import
+    const archBtn = $('#archidekt-import-btn'), archUrl = $('#archidekt-url');
+    if (archBtn && archUrl) {
+      const doImport = () => { const v = archUrl.value.trim(); if (v) importArchidektDeck(v); };
+      archBtn.addEventListener('click', doImport);
+      archUrl.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); doImport(); } });
+    }
     $('#show-partner-slot').addEventListener('click', () => $('#partner-slot').classList.remove('hidden'));
     $('#autobuild-btn').addEventListener('click', autoBuild);
 
