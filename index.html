@@ -1772,6 +1772,15 @@ select { cursor: pointer; }
 .print-actions { display: flex; gap: 5px; margin-top: 4px; flex-wrap: wrap; }
 .btn-sm { padding: 5px 10px !important; font-size: .72rem !important; flex: 1; min-width: 0; }
 
+/* ── Multi-source price chips (card detail) ─────────────────────── */
+.price-sources-label { font-family: var(--font-mono); font-size: .6rem; text-transform: uppercase; letter-spacing: .1em; color: var(--text-faint); margin-bottom: 6px; }
+.price-sources { display: flex; flex-wrap: wrap; gap: 6px; }
+.price-chip { display: inline-flex; flex-direction: column; align-items: center; background: var(--surface-3); border: 1px solid var(--border); border-radius: 8px; padding: 5px 10px; min-width: 62px; }
+.price-src { font-family: var(--font-mono); font-size: .55rem; text-transform: uppercase; letter-spacing: .05em; color: var(--text-faint); }
+.price-amt { font-family: var(--font-mono); font-size: .8rem; font-weight: 700; color: var(--success); margin-top: 1px; }
+.buy-option-mkm .buy-option-name::before { content: '🇪🇺 '; }
+.buy-option-ch .buy-option-name::before { content: '💻 '; }
+
 </style>
 </head>
 <body>
@@ -2771,9 +2780,23 @@ function buyOptions(cardName, arenaLegal = false) {
   // 3. Card Kingdom
   options.push({ label: 'Card Kingdom', url: ckLink(cardName), variant: 'buy-option-ck', priority: 3 });
 
-  // 4. MTG Arena — only if card is in an Arena-legal set
+  // 4. Cardmarket (Europe)
+  options.push({
+    label: 'Cardmarket (EU)',
+    url: 'https://www.cardmarket.com/en/Magic/Products/Search?searchString=' + encodeURIComponent(cardName),
+    variant: 'buy-option-mkm', priority: 4,
+  });
+
+  // 5. Cardhoarder (MTGO)
+  options.push({
+    label: 'Cardhoarder (MTGO)',
+    url: 'https://www.cardhoarder.com/cards?data%5Bsearch%5D=' + encodeURIComponent(cardName),
+    variant: 'buy-option-ch', priority: 5,
+  });
+
+  // 6. MTG Arena — only if card is in an Arena-legal set
   if (arenaLegal) {
-    options.push({ label: 'MTG Arena', url: ARENA_BASE, variant: 'buy-option-arena', priority: 4 });
+    options.push({ label: 'MTG Arena', url: ARENA_BASE, variant: 'buy-option-arena', priority: 6 });
   }
 
   return options;
@@ -6463,7 +6486,21 @@ const Render = (() => {
         (inColl ? '' : `<button class="btn btn-ghost" data-action="cdm-add-coll" data-id="${Render.escapeHtml(card.id)}">+ Collection</button>`);
     }
     const buyEl = $('#cdm-buy-section');
-    if (buyEl) buyEl.innerHTML = ''; // seller stock badge returns in a later update
+    if (buyEl) {
+      // All price sources Scryfall bundles (same data Archidekt uses):
+      // TCGPlayer/Card Kingdom (USD), Cardmarket (EUR), Cardhoarder (MTGO tix).
+      const p = card.prices || {};
+      const chips = [];
+      if (p.usd)       chips.push(`<span class="price-chip"><span class="price-src">TCG/CK</span><span class="price-amt">$${p.usd}</span></span>`);
+      if (p.usd_foil)  chips.push(`<span class="price-chip"><span class="price-src">Foil</span><span class="price-amt">$${p.usd_foil}</span></span>`);
+      if (p.usd_etched)chips.push(`<span class="price-chip"><span class="price-src">Etched</span><span class="price-amt">$${p.usd_etched}</span></span>`);
+      if (p.eur)       chips.push(`<span class="price-chip"><span class="price-src">Cardmarket</span><span class="price-amt">\u20ac${p.eur}</span></span>`);
+      if (p.eur_foil)  chips.push(`<span class="price-chip"><span class="price-src">MKM Foil</span><span class="price-amt">\u20ac${p.eur_foil}</span></span>`);
+      if (p.tix)       chips.push(`<span class="price-chip"><span class="price-src">MTGO</span><span class="price-amt">${p.tix} tix</span></span>`);
+      buyEl.innerHTML = chips.length
+        ? `<div class="price-sources-label">Prices \u2014 all sources</div><div class="price-sources">${chips.join('')}</div>`
+        : '';
+    }
   }
 
   function wireCardDetailModal() {
