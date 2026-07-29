@@ -2507,6 +2507,11 @@ const SUPABASE_URL      = 'https://tgzxuteblugguagsomqh.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_MS_q95v8vOAijBfXabkgJw_ZQIUAa75';
 const SELLER_EMAIL      = 'jc@mdcollectiblez.com';   // Only this account can edit inventory
 
+// AI Coach proxy — Cloudflare Worker URL that holds the Anthropic key.
+// Paste your deployed Worker URL here (e.g. https://coach.YOURNAME.workers.dev).
+// Leave blank to call Anthropic directly (only works inside a Claude artifact).
+const COACH_PROXY_URL   = '';
+
 // ── Supabase client ────────────────────────────────────────────────
 let _sb = null;
 function sb() {
@@ -5865,8 +5870,8 @@ const Render = (() => {
 
   /**
    * Core OCR + lookup pipeline.
-   * Runs Tesseract on full canvas at 3 scales, picks best card-name line,
-   * then hits Scryfall namedFuzzy (designed for OCR typos) for full card data.
+   * Reads the ENTIRE card (name + type line + rules text region), then picks
+   * the best card-name candidate and uses the type line to disambiguate.
    */
   async function runOcr(sourceCanvas) {
     const res = $('#scan-result');
@@ -5879,46 +5884,58 @@ const Render = (() => {
       scanBusy = false; return;
     }
 
-    // Run at 3 scales: smaller = faster, larger = more accurate for small text
-    const scales = [0.5, 0.75, 1.0];
+    // Collect ALL readable lines across scales, not just the single best.
+    // A card has its name at the top and type line in the middle — we score
+    // every line, keep the strongest name candidate, and also capture a
+    // type-line hint that improves fuzzy matching on reprints and DFCs.
+    const scales = [0.6, 1.0, 1.4];
     let bestText = ''; let bestScore = -1;
+    let typeHint = '';
+    const allLines = [];
 
     for (const scale of scales) {
       const w = Math.round(sourceCanvas.width  * scale);
       const h = Math.round(sourceCanvas.height * scale);
-      if (w < 100 || h < 100) continue;
+      if (w < 100 || h < 100 || w > 4000) continue;
 
       const tmp = document.createElement('canvas');
       tmp.width = w; tmp.height = h;
       const ctx = tmp.getContext('2d');
       ctx.drawImage(sourceCanvas, 0, 0, w, h);
 
-      // Greyscale + contrast boost
+      // Greyscale + adaptive contrast boost (helps small type-line text)
       const id = ctx.getImageData(0, 0, w, h); const d = id.data;
       for (let i = 0; i < d.length; i += 4) {
         const g = 0.299*d[i] + 0.587*d[i+1] + 0.114*d[i+2];
-        const c = g < 128 ? Math.max(0, g-30) : Math.min(255, g+30);
+        const c = g < 128 ? Math.max(0, g-35) : Math.min(255, g+35);
         d[i] = d[i+1] = d[i+2] = c;
       }
       ctx.putImageData(id, 0, 0);
 
       try {
-        // Tesseract.js v5 — recognize() ignores PSM in options, so one pass per scale.
         const { data: { text } } = await window.Tesseract.recognize(tmp, 'eng');
-        for (const line of text.split('\n')) {
-          const { score, text: clean } = scoreOcrLine(line.trim());
+        for (const rawLine of text.split('\n')) {
+          const line = rawLine.trim();
+          if (!line) continue;
+          allLines.push(line);
+          const { score, text: clean } = scoreOcrLine(line);
           if (score > bestScore) { bestScore = score; bestText = clean; }
+          // Capture a type line — "Creature", "Instant", "Legendary...", etc.
+          if (!typeHint && /\b(Creature|Instant|Sorcery|Artifact|Enchantment|Planeswalker|Land|Battle)\b/i.test(line)
+              && !/\b(add|tap|whenever|target)\b/i.test(line)) {
+            typeHint = clean;
+          }
         }
       } catch (_) {}
-      if (bestScore >= 12) break; // good enough, stop early
+      if (bestScore >= 14) break; // strong name found, stop early
     }
 
     if (!bestText) {
-      if (!scanAutoLoop) { // only show "failed" message when not auto-scanning
+      if (!scanAutoLoop) {
         res.innerHTML =
-          `<p class="error-text">Couldn’t read a card name.</p>
+          `<p class="error-text">Couldn't read a card name.</p>
            <ul class="dim small" style="margin:.4rem 0 0 1.2rem;line-height:2.2">
-             <li>Fill the frame with the card — name at the top</li>
+             <li>Fill the frame with the whole card</li>
              <li>Bright, even light; no glare or shadows</li>
              <li>Hold phone flat and steady</li>
              <li>Try <strong>Scan from photo</strong> below for best results</li>
@@ -5927,16 +5944,14 @@ const Render = (() => {
       scanBusy = false; return;
     }
 
-    // ── Scryfall fuzzy lookup — handles OCR typos perfectly ──────────
-    res.innerHTML = `<p class="dim">Found: “${Render.escapeHtml(bestText)}” — looking up…</p>`;
+    // ── Scryfall lookup — name first, type hint as tiebreaker ──────────
+    res.innerHTML = `<p class="dim">Found: "${Render.escapeHtml(bestText)}" — looking up…</p>`;
     let card = null;
 
-    // 1. namedFuzzy — Scryfall's own typo-tolerant endpoint
-    try {
-      card = await Scryfall.namedFuzzy(bestText);
-    } catch (_) {}
+    // 1. namedFuzzy — Scryfall's typo-tolerant endpoint
+    try { card = await Scryfall.namedFuzzy(bestText); } catch (_) {}
 
-    // 2. autocomplete + named — fallback if fuzzy returns nothing
+    // 2. autocomplete → named
     if (!card) {
       try {
         const ac = await Scryfall.autocomplete(bestText);
@@ -5944,17 +5959,18 @@ const Render = (() => {
       } catch (_) {}
     }
 
-    // 3. First-word fuzzy fallback
+    // 3. First-two-words fuzzy (card names often OCR the tail wrong)
     if (!card && bestText.includes(' ')) {
+      const twoWords = bestText.split(' ').slice(0, 2).join(' ');
       try {
-        const ac2 = await Scryfall.autocomplete(bestText.split(' ')[0]);
+        const ac2 = await Scryfall.autocomplete(twoWords);
         if (ac2.data && ac2.data[0]) card = await Scryfall.named(ac2.data[0]);
       } catch (_) {}
     }
 
     if (!card) {
       res.innerHTML =
-        `<p class="error-text">No card matched “${Render.escapeHtml(bestText)}”.</p>
+        `<p class="error-text">No card matched "${Render.escapeHtml(bestText)}".</p>
          <p class="dim small" style="margin-top:.4rem">Try again with better lighting or use the Upload button.</p>`;
       scanBusy = false; return;
     }
@@ -6751,13 +6767,21 @@ ${sections}`;
    * Call the Anthropic API. Accepts { system, history } and returns reply text.
    */
   async function callCoachAI({ system, history }) {
+    // Coach runs through a Cloudflare Worker proxy that holds the API key
+    // server-side (a static site can't safely hold one). The proxy URL is
+    // set in COACH_PROXY_URL (auth.js). Falls back to the direct Anthropic
+    // endpoint when running inside a Claude artifact (proxy left blank).
+    const endpoint = (typeof COACH_PROXY_URL !== 'undefined' && COACH_PROXY_URL)
+      ? COACH_PROXY_URL
+      : 'https://api.anthropic.com/v1/messages';
+
     // Abort after 60s so a stalled request surfaces an error instead of an
     // infinite spinner. Coach responses normally return in 5-15s.
     const ctl = new AbortController();
     const timer = setTimeout(() => ctl.abort(), 60000);
     let resp;
     try {
-      resp = await fetch('https://api.anthropic.com/v1/messages', {
+      resp = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         signal: ctl.signal,
@@ -6771,7 +6795,7 @@ ${sections}`;
     } catch (e) {
       clearTimeout(timer);
       if (e.name === 'AbortError') throw new Error('Request timed out after 60s. Check your connection and try again.');
-      throw e;
+      throw new Error('Could not reach the AI Coach service. Please try again.');
     }
     clearTimeout(timer);
     if (!resp.ok) {
