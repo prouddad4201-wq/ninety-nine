@@ -1056,7 +1056,7 @@ select { cursor: pointer; }
   position: relative;
   width: 100%;
   background: #000;
-  max-height: 300px;
+  max-height: 460px;
   overflow: hidden;
   display: flex;
   align-items: center;
@@ -1064,7 +1064,7 @@ select { cursor: pointer; }
 }
 #scan-video {
   width: 100%;
-  max-height: 300px;
+  max-height: 460px;
   object-fit: cover;
   display: block;
 }
@@ -1076,18 +1076,24 @@ select { cursor: pointer; }
   pointer-events: none;
 }
 .scan-aim-box {
-  width: 75%; height: 18%;
-  border: 2px solid rgba(245,166,35,.8);
-  border-radius: 6px;
-  box-shadow: 0 0 0 2000px rgba(0,0,0,.35);
+  /* Full card silhouette (MTG cards are ~2.5:3.5) so the guide trains
+     users to fit the WHOLE card in frame, not just the name band. */
+  width: min(58%, 220px);
+  aspect-ratio: 5 / 7;
+  height: auto;
+  border: 2px solid rgba(245,166,35,.85);
+  border-radius: 12px;
+  box-shadow: 0 0 0 2000px rgba(0,0,0,.4);
 }
 .scan-aim-label {
-  margin-top: 8px;
+  margin-top: 10px;
   font-size: .72rem;
-  color: rgba(245,166,35,.9);
+  color: rgba(245,166,35,.95);
   font-weight: 600;
   letter-spacing: .04em;
   text-shadow: 0 1px 4px rgba(0,0,0,.8);
+  text-align: center;
+  max-width: 80%;
 }
 .scan-camera-status {
   position: absolute; bottom: 8px; left: 0; right: 0;
@@ -1139,8 +1145,8 @@ select { cursor: pointer; }
   .scan-card-img { width: 70px; border-radius: 6px; }
   .scan-controls-row { flex-wrap: wrap; }
   .scan-controls-row .btn { flex: 1 1 auto; min-width: 80px; }
-  .scan-camera-wrap { max-height: 220px; }
-  #scan-video { max-height: 220px; }
+  .scan-camera-wrap { max-height: 380px; }
+  #scan-video { max-height: 380px; }
 }
 
 /* ── Affiliate settings modal ────────────────────────────────────── */
@@ -2105,7 +2111,7 @@ select { cursor: pointer; }
           <!-- Aim guide overlay -->
           <div class="scan-aim-overlay">
             <div class="scan-aim-box"></div>
-            <span class="scan-aim-label">Point at card name</span>
+            <span class="scan-aim-label">Fit the whole card in frame</span>
           </div>
           <div class="scan-camera-status" id="scan-camera-status">Camera starting…</div>
         </div>
@@ -2563,7 +2569,11 @@ function sb() {
     _sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
     return _sb;
   }
-  return null;
+  // The Supabase JS library (loaded from a CDN <script> tag) hasn't finished
+  // loading yet, or was blocked (ad blocker, offline, slow connection). Throw
+  // a clear message instead of letting callers hit a cryptic
+  // "Cannot read properties of null" error.
+  throw new Error('Account service is still loading — wait a second and try again.');
 }
 function configured() {
   return SUPABASE_URL !== 'YOUR_SUPABASE_URL' && SUPABASE_ANON_KEY !== 'YOUR_SUPABASE_ANON_KEY';
@@ -2606,8 +2616,11 @@ function isLoggedIn() { return !!currentUser; }
 
 async function initAuth() {
   if (!configured()) { emitAuth(null); return; }
-  const client = sb();
-  if (!client) { emitAuth(null); return; }
+  // sb() now throws if the CDN library hasn't loaded yet (see below) — that's
+  // useful inside a user-triggered click handler, but this is a silent
+  // background init call at page load, so it must degrade gracefully instead.
+  let client;
+  try { client = sb(); } catch (e) { emitAuth(null); return; }
   try {
     const { data: { session } } = await client.auth.getSession();
     emitAuth(session?.user || null);
@@ -2621,12 +2634,29 @@ async function initAuth() {
 }
 
 async function signInEmail(email, password) {
-  const { data, error } = await sb().auth.signInWithPassword({ email, password });
+  let client;
+  try { client = sb(); } catch (e) { throw e; }
+  let data, error;
+  try {
+    ({ data, error } = await client.auth.signInWithPassword({ email, password }));
+  } catch (e) {
+    throw new Error('Could not reach the account service. If this persists, the database project may need to be restored — check the Supabase dashboard.');
+  }
   if (error) throw new Error(error.message);
   return data;
 }
 async function signUpEmail(email, password) {
-  const { data, error } = await sb().auth.signUp({ email, password });
+  let client;
+  try { client = sb(); } catch (e) { throw e; }
+  let data, error;
+  try {
+    ({ data, error } = await client.auth.signUp({ email, password }));
+  } catch (e) {
+    // A network-level failure here (not a Supabase error object) usually
+    // means the project is unreachable — most often a free-tier project
+    // that auto-paused from inactivity and needs restoring in the dashboard.
+    throw new Error('Could not reach the account service. If this persists, the database project may need to be restored — check the Supabase dashboard.');
+  }
   if (error) throw new Error(error.message);
   return data;
 }
